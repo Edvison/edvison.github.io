@@ -1,0 +1,613 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hans">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Edvison&#39;s blog">
+    <title>Linux内核调试 - Edvison&#39;s blog</title>
+    <meta name="author" content="Edvison">
+    
+    
+    
+        <link rel="alternate" type="application/atom+xml" title="RSS" href="/atom.xml">
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Edvison","sameAs":["https://github.com/edvison","mailto:edvisonmail@163.com"],"image":"1.png"},"articleBody":"\n0x00 前言这段时间开始学习了linux内核提权，也跟进看了一些漏洞。但是由于linux系统版本、内核版本的不同，驱动模块或者是某个函数的加载地址都是不同的，如果不能自己亲自调试内核，就算给了exp也是无法利用。之前也没有怎么接触过内核调试，所以这几天找了许多资料开始学习调试内核的方法，总结整理在这。\n本文测试系统是Ubuntu12.04 64位。\n文章首发于先知社区，https://xianzhi.aliyun.com/forum/topic/2024\n0x01 准备环境首先当然是准备需要调试的内核版本，linux的所有历史版本都可以在这里找到。\ndown下来后进入源码树根目录，开始配置内核，这里使用基于ncurse库编制的图形界面工具：\nmake menuconfig\n由于我们需要使用kgdb调试内核，注意下面这几项一定要配置好：\nKernelHacking –&gt;\n\n选中Compile the kernel with debug info\n选中Compile the kernel with frame pointers \n选中KGDB:kernel debugging with remote gdb，其下的全部都选中。\n\n有几项需要去掉：\nProcessor type and features–&gt;\n\n去掉Paravirtualized guest support\n\nKernelHacking–&gt;\n\n去掉Writeprotect kernel read-only data structures（否则不能用软件断点）\n\n保存config文件之后make、make modules_install、make install编译安装就好。具体安装编译内核可以看我另一篇笔记\n0x02 使用kvm、gdb调试内核先介绍一下现在用得比较多的调试内核方法吧，简单地说就是在linux系统里再装一个kvm虚拟机配置好gdb远程调试支持，然后在linux主机上连接调试。但是我因为电脑配置不高，装了kvm太卡就放弃了这个方法orz总之还是讲一下怎么调试吧。查看cpu是否支持，如果没有输出，要在虚拟机设置里选上Inter VT:\ngrep vmx /proc/cpuinfo\n\n安装：\n$ sudo apt-get install kvm qemu libvirt-bin virtinst virt-manager virt-viewer\n需要将自己添加进kvm、libvirtd用户组：\n$ sudo adduser 用户名 kvm\n$ sudo adduser 用户名 libvirtd\n$ groups\n打开libvirt-bin服务：\n$ sudo service libvirt-bin start\n然后打开virt-manager开始装虚拟机:\n$ gksudo virt-manager\n这个图形界面的virt-manager和vmware差不多，就这样直接装虚拟机就好了。然后添加下面配置使虚拟机支持gdb调试：\n&lt;qemu:commandline&gt; \n    &lt;qemu:arg value=&apos;-S&apos;/&gt; \n    &lt;qemu:arg value=&apos;-gdb&apos;/&gt; \n    &lt;qemu:arg value=&apos;tcp::1234&apos;/&gt; \n &lt;/qemu:commandline&gt;\n将要调试的内核源码树复制进虚拟机，准备调试。之后在主机端进入gdb调试：\n$ gdb vmlinux\n(gdb) target remote 127.0.0.1:1234 //连接虚拟机,这时虚拟机已经断下\n(gdb) b drv_open //在驱动程序的入口函数设置断点\n(gdb) c\nCountinuing.  //让虚拟机重新跑起来\n如果要调试驱动模块的话，要在虚拟机里加载该模块：\n$ insmod drv.ko \n然后再回到主机开始调试。\n0x03 用gdb和qemu调试内核用qemu其实和上面kvm的差不多（qemu也已经在上面那步装好了），这里介绍一个比较快速的方法。直接在qemu中启动已经编译好的Linux内核，不用再制作完整的启动镜像：\nqemu-system-x86_64 -s -S -kernel arch/i386/boot/bzImage -hda /boot/initrd.img -append &quot;root=/dev/hda&quot; -gdb tcp::1234\n命令中的bzImage和initrd.img就是内核源码树中对应目录下的文件。如果不需要图形界面的话可以加上下面的参数：\n-nographic\n在主机用gdb调试连接：\n$ gdb vmlinux\n(gdb) target remote:1234\n和上面的差不多可以开始调试了。\n0x04 用kdb和kgdb调试内核驱动模块接下来介绍如何用kgdb和gdb来调试内核驱动。\nkgdb 是一个在 Linux 内核上提供完整的 gdb 调试器功能的补丁。通过串口连线以钩子的形式挂入目标调试系统进行工作，然后远程运行 gdb。使用 kgdb 时需要两个系统——一个用于运行调试器，另一个用于运行待调试的内核。\n当然，用两台VM虚拟机也是可以调试内核的，渣电脑开心地都哭了(つд⊂)\n首先准备两台VMware虚拟机，直接复制之前配置好的虚拟机来创建一个新的就好。\n配置双机通信\n将准备好的两台虚拟机添加串行端口，如果有并行端口记得先删除。注意箭头处的设置，一个得是客户端一个是服务端。\n然后来验证一下是否成功连接。先在客户机使用下面命令，准备接收消息：\n$ cat /dev/ttyS0\n然后在目标机（开启服务端的那个）输入下面命令：\n$ echo edvison &gt; /dev/ttyS0\n如果没有显示就试下ttyS[0~3]\n配置串口调试\n两个虚拟机都更改/etc/default/grub文件，在GRUB_CMDLINE_LINUX_DEFAULT这项后面加上kgdboc=ttyS1,115200，如果不需要图形界面启动的话可以加上text（最好目标机使用这个）：然后update-grub一下，重启系统。进入grub界面，选择要调试的内核版本。（没有进grub的话去把gurb文件里GRUB_HIDDEN_TIMEOUT这行注释掉）出现下面的信息就说明配置成功了。\n开始调试\n打开目标机，可以看到已经显示命令行界面了（之前配置里加了text）\n编译、载入要调试的驱动（这里使用内核ROP的那个栗子，源码）\n打开客户机，使用gdb准备开始连接调试：\n编译加载好驱动后，在目标机里查看我们调试的驱动的加载基址，由于我们的驱动程序能直接打印基址，所以用dmesg命令查看就好：\n另外还可以用下面的命令查看模块基址：\ncat /proc/modules | grep drv\n然后在目标机下输入下面的命令，使目标机进入被调试的假死状态：\n# echo g &gt; /proc/sysrq-trigger\n\n接下来就可以在客户机里连接上目标机了：\n之后在客户机里加载符号文件，并给驱动的入口函数device_ioctl()和device_open()设置断点：\n输入c让目标机继续运行。然后我们在目标机调试trigger程序，来调用内核模块的device_ioctl函数。123456789101112131415161718192021#define _GNU_SOURCE#include &lt;sys/types.h&gt;#include &lt;sys/stat.h&gt;#include &lt;fcntl.h&gt;#include &lt;stdio.h&gt;#include &lt;stdlib.h&gt;#include &lt;string.h&gt;#include \"drv.h\"#define DEVICE_PATH \"/dev/vulndrv\"int main(int argc, char **argv) &#123;\tint fd;\tstruct drv_req req;\treq.offset = atoll(argv[1]);\t//map = mmap((void *)..., ..., 3, 0x32, 0, 0);\tfd = open(DEVICE_PATH, O_RDONLY); \tif (fd == -1) &#123;\t\tperror(\"open\");\t&#125;\tioctl(fd, 0, &amp;req);\treturn 0;&#125;\n在open函数和ioctl下下断：\n调试到这里后断下（直接运行./trigger [offset]也能在客户机里断下），可以看到客户机已经进入了驱动程序的调试模式，接下来就可以随意进行调试了;)\n0x05 参考链接http://blog.nsfocus.net/gdb-kgdb-debug-application/https://qemu.weilnetz.de/doc/qemu-doc.html#direct_005flinux_005fboothttps://www.ibm.com/developerworks/cn/linux/1508_zhangdw_gdb/index.html","dateCreated":"2018-05-11T22:01:55+08:00","dateModified":"2018-05-11T22:04:23+08:00","datePublished":"2018-05-11T22:01:55+08:00","description":"这段时间开始学习了linux内核提权，也跟进看了一些漏洞。但是由于linux系统版本、内核版本的不同，驱动模块或者是某个函数的加载地址都是不同的，如果不能自己亲自调试内核，就算给了exp也是无法利用。之前也没有怎么接触过内核调试，所以这几天找了许多资料开始学习调试内核的方法，总结整理在这。","headline":"Linux内核调试","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://edvison.cn/2018/05/11/内核调试/"},"publisher":{"@type":"Organization","name":"Edvison","sameAs":["https://github.com/edvison","mailto:edvisonmail@163.com"],"image":"1.png","logo":{"@type":"ImageObject","url":"1.png"}},"url":"http://edvison.cn/2018/05/11/内核调试/","keywords":"linux, 内核, 调试"}</script>
+    <meta name="description" content="这段时间开始学习了linux内核提权，也跟进看了一些漏洞。但是由于linux系统版本、内核版本的不同，驱动模块或者是某个函数的加载地址都是不同的，如果不能自己亲自调试内核，就算给了exp也是无法利用。之前也没有怎么接触过内核调试，所以这几天找了许多资料开始学习调试内核的方法，总结整理在这。">
+<meta name="keywords" content="linux,内核,调试">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Linux内核调试">
+<meta property="og:url" content="http://edvison.cn/2018/05/11/内核调试/index.html">
+<meta property="og:site_name" content="Edvison&#39;s blog">
+<meta property="og:description" content="这段时间开始学习了linux内核提权，也跟进看了一些漏洞。但是由于linux系统版本、内核版本的不同，驱动模块或者是某个函数的加载地址都是不同的，如果不能自己亲自调试内核，就算给了exp也是无法利用。之前也没有怎么接触过内核调试，所以这几天找了许多资料开始学习调试内核的方法，总结整理在这。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="http://edvison.cn/2018/05/11/内核调试/11623057.png">
+<meta property="og:image" content="http://edvison.cn/2018/05/11/内核调试/20996985.png">
+<meta property="og:image" content="http://edvison.cn/2018/05/11/内核调试/21234809.png">
+<meta property="og:image" content="http://edvison.cn/2018/05/11/内核调试/21243748.png">
+<meta property="og:image" content="http://edvison.cn/2018/05/11/内核调试/23489008.png">
+<meta property="og:image" content="http://edvison.cn/2018/05/11/内核调试/25484479.png">
+<meta property="og:image" content="http://edvison.cn/2018/05/11/内核调试/25872937.png">
+<meta property="og:image" content="http://edvison.cn/2018/05/11/内核调试/2776474.png">
+<meta property="og:image" content="http://edvison.cn/2018/05/11/内核调试/26023743.png">
+<meta property="og:image" content="http://edvison.cn/2018/05/11/内核调试/26033868.png">
+<meta property="og:image" content="http://edvison.cn/2018/05/11/内核调试/3168427.png">
+<meta property="og:image" content="http://edvison.cn/2018/05/11/内核调试/fc9221e2-b81f-4d32-9998-1d70eb4f0ad8.png">
+<meta property="og:image" content="http://edvison.cn/2018/05/11/内核调试/11826264.png">
+<meta property="og:updated_time" content="2018-05-11T14:04:23.841Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Linux内核调试">
+<meta name="twitter:description" content="这段时间开始学习了linux内核提权，也跟进看了一些漏洞。但是由于linux系统版本、内核版本的不同，驱动模块或者是某个函数的加载地址都是不同的，如果不能自己亲自调试内核，就算给了exp也是无法利用。之前也没有怎么接触过内核调试，所以这几天找了许多资料开始学习调试内核的方法，总结整理在这。">
+<meta name="twitter:image" content="http://edvison.cn/2018/05/11/内核调试/11623057.png">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://edvison.cn/assets/images/1.png"/>
+    
+    
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/font-awesome.css">
+    <link rel="stylesheet" href="/assets/css/jquery.fancybox.css">
+    <link rel="stylesheet" href="/assets/css/thumbs.css">
+    <link rel="stylesheet" href="/assets/css/tranquilpeak.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="5">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Edvison&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="5">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+                </a>
+                <h4 class="sidebar-profile-name">Edvison</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>Just the way you are</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link open-algolia-search"
+                             href="#search"
+                            
+                            title="search"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-search" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">search</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="about"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">about</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/edvison" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="E-Mail">
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-envelope-o" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">E-Mail</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/atom.xml"
+                            
+                            title="RSS"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-rss" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">RSS</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+            <div id="main" data-behavior="5"
+                 class="
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+        <div class="post-header main-content-wrap text-left">
+    
+        <h1 class="post-title">
+            Linux内核调试
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2018-05-11T22:01:55+08:00">
+	
+		    11 May 2018
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/kernel/">kernel</a>
+
+
+    
+</div>
+
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <!-- excerpt --></p>
+<h2 id="0x00-前言"><a href="#0x00-前言" class="headerlink" title="0x00 前言"></a>0x00 前言</h2><p>这段时间开始学习了linux内核提权，也跟进看了一些漏洞。但是由于linux系统版本、内核版本的不同，驱动模块或者是某个函数的加载地址都是不同的，如果不能自己亲自调试内核，就算给了exp也是无法利用。之前也没有怎么接触过内核调试，所以这几天找了许多资料开始学习调试内核的方法，总结整理在这。</p>
+<p>本文测试系统是Ubuntu12.04 64位。</p>
+<p><strong>文章首发于先知社区，<a href="https://xianzhi.aliyun.com/forum/topic/2024" target="_blank" rel="noopener">https://xianzhi.aliyun.com/forum/topic/2024</a></strong><br><h1 id="table-of-contents">Inhaltsverzeichnis</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#0x00-前言"><span class="toc-text">0x00 前言</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x01-准备环境"><span class="toc-text">0x01 准备环境</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x02-使用kvm、gdb调试内核"><span class="toc-text">0x02 使用kvm、gdb调试内核</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x03-用gdb和qemu调试内核"><span class="toc-text">0x03 用gdb和qemu调试内核</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x04-用kdb和kgdb调试内核驱动模块"><span class="toc-text">0x04 用kdb和kgdb调试内核驱动模块</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x05-参考链接"><span class="toc-text">0x05 参考链接</span></a></li></ol></p>
+<h2 id="0x01-准备环境"><a href="#0x01-准备环境" class="headerlink" title="0x01 准备环境"></a>0x01 准备环境</h2><p>首先当然是准备需要调试的内核版本，linux的所有历史版本都可以在<a href="https://www.kernel.org/pub/linux/kernel/" target="_blank" rel="noopener">这里</a>找到。</p>
+<p>down下来后进入源码树根目录，开始配置内核，这里使用基于ncurse库编制的图形界面工具：</p>
+<pre><code>make menuconfig
+</code></pre><p>由于我们需要使用kgdb调试内核，注意下面这几项一定要配置好：</p>
+<p>KernelHacking –&gt;</p>
+<blockquote>
+<pre><code>选中Compile the kernel with debug info
+选中Compile the kernel with frame pointers 
+选中KGDB:kernel debugging with remote gdb，其下的全部都选中。
+</code></pre></blockquote>
+<p>有几项需要去掉：</p>
+<p>Processor type and features–&gt;</p>
+<blockquote>
+<p>去掉Paravirtualized guest support</p>
+</blockquote>
+<p>KernelHacking–&gt;</p>
+<blockquote>
+<p>去掉Writeprotect kernel read-only data structures（否则不能用软件断点）</p>
+</blockquote>
+<p>保存config文件之后make、make modules_install、make install编译安装就好。<br>具体安装编译内核可以看我另一篇<a href="http://2456cc35.wiz03.com/share/s/0AlIMR0YIkmh2tjeP42sDMEN2cppy23AfkXs2--YCH1Y7_ne" target="_blank" rel="noopener">笔记</a></p>
+<h2 id="0x02-使用kvm、gdb调试内核"><a href="#0x02-使用kvm、gdb调试内核" class="headerlink" title="0x02 使用kvm、gdb调试内核"></a>0x02 使用kvm、gdb调试内核</h2><p>先介绍一下现在用得比较多的调试内核方法吧，简单地说就是在linux系统里再装一个kvm虚拟机配置好gdb远程调试支持，然后在linux主机上连接调试。但是我因为电脑配置不高，装了kvm太卡就放弃了这个方法orz<br>总之还是讲一下怎么调试吧。<br>查看cpu是否支持，如果没有输出，要在虚拟机设置里选上Inter VT:</p>
+<pre><code>grep vmx /proc/cpuinfo
+</code></pre><p><img src="11623057.png" alt="11623057.png"></p>
+<p>安装：</p>
+<pre><code>$ sudo apt-get install kvm qemu libvirt-bin virtinst virt-manager virt-viewer
+</code></pre><p>需要将自己添加进kvm、libvirtd用户组：</p>
+<pre><code>$ sudo adduser 用户名 kvm
+$ sudo adduser 用户名 libvirtd
+$ groups
+</code></pre><p>打开libvirt-bin服务：</p>
+<pre><code>$ sudo service libvirt-bin start
+</code></pre><p>然后打开virt-manager开始装虚拟机:</p>
+<pre><code>$ gksudo virt-manager
+</code></pre><p>这个图形界面的virt-manager和vmware差不多，就这样直接装虚拟机就好了。<br>然后添加下面配置使虚拟机支持gdb调试：</p>
+<pre><code>&lt;qemu:commandline&gt; 
+    &lt;qemu:arg value=&apos;-S&apos;/&gt; 
+    &lt;qemu:arg value=&apos;-gdb&apos;/&gt; 
+    &lt;qemu:arg value=&apos;tcp::1234&apos;/&gt; 
+ &lt;/qemu:commandline&gt;
+</code></pre><p>将要调试的内核源码树复制进虚拟机，准备调试。<br>之后在主机端进入gdb调试：</p>
+<pre><code>$ gdb vmlinux
+(gdb) target remote 127.0.0.1:1234 //连接虚拟机,这时虚拟机已经断下
+(gdb) b drv_open //在驱动程序的入口函数设置断点
+(gdb) c
+Countinuing.  //让虚拟机重新跑起来
+</code></pre><p>如果要调试驱动模块的话，要在虚拟机里加载该模块：</p>
+<pre><code>$ insmod drv.ko 
+</code></pre><p>然后再回到主机开始调试。</p>
+<h2 id="0x03-用gdb和qemu调试内核"><a href="#0x03-用gdb和qemu调试内核" class="headerlink" title="0x03 用gdb和qemu调试内核"></a>0x03 用gdb和qemu调试内核</h2><p>用qemu其实和上面kvm的差不多（qemu也已经在上面那步装好了），这里介绍一个比较快速的方法。直接在qemu中启动已经编译好的Linux内核，不用再制作完整的启动镜像：</p>
+<pre><code>qemu-system-x86_64 -s -S -kernel arch/i386/boot/bzImage -hda /boot/initrd.img -append &quot;root=/dev/hda&quot; -gdb tcp::1234
+</code></pre><p>命令中的bzImage和initrd.img就是内核源码树中对应目录下的文件。<br>如果不需要图形界面的话可以加上下面的参数：</p>
+<pre><code>-nographic
+</code></pre><p>在主机用gdb调试连接：</p>
+<pre><code>$ gdb vmlinux
+(gdb) target remote:1234
+</code></pre><p>和上面的差不多可以开始调试了。</p>
+<h2 id="0x04-用kdb和kgdb调试内核驱动模块"><a href="#0x04-用kdb和kgdb调试内核驱动模块" class="headerlink" title="0x04 用kdb和kgdb调试内核驱动模块"></a>0x04 用kdb和kgdb调试内核驱动模块</h2><p>接下来介绍如何用kgdb和gdb来调试内核驱动。</p>
+<p>kgdb 是一个在 Linux 内核上提供完整的 gdb 调试器功能的补丁。通过串口连线以钩子的形式挂入目标调试系统进行工作，然后远程运行 gdb。使用 kgdb 时需要两个系统——一个用于运行调试器，另一个用于运行待调试的内核。</p>
+<p>当然，用两台VM虚拟机也是可以调试内核的，渣电脑开心地都哭了(つд⊂)</p>
+<p>首先准备两台VMware虚拟机，直接复制之前配置好的虚拟机来创建一个新的就好。</p>
+<p><strong>配置双机通信</strong></p>
+<p>将准备好的两台虚拟机添加串行端口，如果有并行端口记得先删除。注意箭头处的设置，一个得是客户端一个是服务端。<br><img src="20996985.png" alt="20996985.png"></p>
+<p>然后来验证一下是否成功连接。<br>先在客户机使用下面命令，准备接收消息：</p>
+<pre><code>$ cat /dev/ttyS0
+</code></pre><p>然后在目标机（开启服务端的那个）输入下面命令：</p>
+<pre><code>$ echo edvison &gt; /dev/ttyS0
+</code></pre><p>如果没有显示就试下<code>ttyS[0~3]</code><br><img src="21234809.png" alt="21234809.png"><br><img src="21243748.png" alt="21243748.png"></p>
+<p><strong>配置串口调试</strong></p>
+<p>两个虚拟机都更改<code>/etc/default/grub</code>文件，在GRUB_CMDLINE_LINUX_DEFAULT这项后面加上<code>kgdboc=ttyS1,115200</code>，如果不需要图形界面启动的话可以加上text（最好目标机使用这个）：<br><img src="23489008.png" alt="23489008.png"><br>然后<code>update-grub</code>一下，重启系统。<br>进入grub界面，选择要调试的内核版本。（没有进grub的话去把gurb文件里GRUB_HIDDEN_TIMEOUT这行注释掉）<br>出现下面的信息就说明配置成功了。<br><img src="25484479.png" alt="25484479.png"></p>
+<p><strong>开始调试</strong></p>
+<p>打开目标机，可以看到已经显示命令行界面了（之前配置里加了text）</p>
+<p>编译、载入要调试的驱动（这里使用内核ROP的那个栗子，<a href="https://github.com/vnik5287/kernel_rop" target="_blank" rel="noopener">源码</a>）</p>
+<p>打开客户机，使用gdb准备开始连接调试：<br><img src="25872937.png" alt="25872937.png"></p>
+<p>编译加载好驱动后，在目标机里查看我们调试的驱动的加载基址，由于我们的驱动程序能直接打印基址，所以用dmesg命令查看就好：<br><img src="2776474.png" alt="2776474.png"></p>
+<p>另外还可以用下面的命令查看模块基址：</p>
+<pre><code>cat /proc/modules | grep drv
+</code></pre><p>然后在目标机下输入下面的命令，使目标机进入被调试的假死状态：</p>
+<pre><code># echo g &gt; /proc/sysrq-trigger
+</code></pre><p><img src="26023743.png" alt="26023743.png"></p>
+<p>接下来就可以在客户机里连接上目标机了：<br><img src="26033868.png" alt="26033868.png"></p>
+<p>之后在客户机里加载符号文件，并给驱动的入口函数<code>device_ioctl()</code>和<code>device_open()</code>设置断点：<br><img src="3168427.png" alt="3168427.png"></p>
+<p>输入c让目标机继续运行。<br>然后我们在目标机调试trigger程序，来调用内核模块的device_ioctl函数。<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> _GNU_SOURCE</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/types.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/stat.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">"drv.h"</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> DEVICE_PATH <span class="meta-string">"/dev/vulndrv"</span></span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span> **argv)</span> </span>&#123;</span><br><span class="line">	<span class="keyword">int</span> fd;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">drv_req</span> <span class="title">req</span>;</span></span><br><span class="line">	req.offset = atoll(argv[<span class="number">1</span>]);</span><br><span class="line">	<span class="comment">//map = mmap((void *)..., ..., 3, 0x32, 0, 0);</span></span><br><span class="line">	fd = open(DEVICE_PATH, O_RDONLY); </span><br><span class="line">	<span class="keyword">if</span> (fd == <span class="number">-1</span>) &#123;</span><br><span class="line">		perror(<span class="string">"open"</span>);</span><br><span class="line">	&#125;</span><br><span class="line">	ioctl(fd, <span class="number">0</span>, &amp;req);</span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>在open函数和ioctl下下断：<br><img src="fc9221e2-b81f-4d32-9998-1d70eb4f0ad8.png" alt="fc9221e2-b81f-4d32-9998-1d70eb4f0ad8.png"></p>
+<p>调试到这里后断下（直接运行./trigger [offset]也能在客户机里断下），可以看到客户机已经进入了驱动程序的调试模式，接下来就可以随意进行调试了;)<br><img src="11826264.png" alt="11826264.png"></p>
+<h2 id="0x05-参考链接"><a href="#0x05-参考链接" class="headerlink" title="0x05 参考链接"></a>0x05 参考链接</h2><p><a href="http://blog.nsfocus.net/gdb-kgdb-debug-application/" target="_blank" rel="noopener">http://blog.nsfocus.net/gdb-kgdb-debug-application/</a><br><a href="https://qemu.weilnetz.de/doc/qemu-doc.html#direct_005flinux_005fboot" target="_blank" rel="noopener">https://qemu.weilnetz.de/doc/qemu-doc.html#direct_005flinux_005fboot</a><br><a href="https://www.ibm.com/developerworks/cn/linux/1508_zhangdw_gdb/index.html" target="_blank" rel="noopener">https://www.ibm.com/developerworks/cn/linux/1508_zhangdw_gdb/index.html</a></p>
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">GETAGGT IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/linux/">linux</a> <a class="tag tag--primary tag--small t-link" href="/tags/内核/">内核</a> <a class="tag tag--primary tag--small t-link" href="/tags/调试/">调试</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/elf病毒分析/" data-tooltip="ELF病毒分析" aria-label="FRÜHER: ELF病毒分析">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/11/内核驱动程序mmap处理程序利用/" data-tooltip="mmap处理程序利用" aria-label="NÄCHSTER: mmap处理程序利用">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/11/内核调试/" title="Teilen auf Facebook">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/11/内核调试/" title="Teilen auf Twitter">
+                    <i class="fa fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/11/内核调试/" title="Teilen auf Google Plus">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2018 Edvison. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="5">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/elf病毒分析/" data-tooltip="ELF病毒分析" aria-label="FRÜHER: ELF病毒分析">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/11/内核驱动程序mmap处理程序利用/" data-tooltip="mmap处理程序利用" aria-label="NÄCHSTER: mmap处理程序利用">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/11/内核调试/" title="Teilen auf Facebook">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/11/内核调试/" title="Teilen auf Twitter">
+                    <i class="fa fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/11/内核调试/" title="Teilen auf Google Plus">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                <div id="share-options-bar" class="share-options-bar" data-behavior="5">
+    <i id="btn-close-shareoptions" class="fa fa-close"></i>
+    <ul class="share-options">
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/11/内核调试/">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Teilen auf Facebook</span>
+                </a>
+            </li>
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/11/内核调试/">
+                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Teilen auf Twitter</span>
+                </a>
+            </li>
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/11/内核调试/">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Teilen auf Google Plus</span>
+                </a>
+            </li>
+        
+    </ul>
+</div>
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-remove"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+        
+            <h4 id="about-card-name">Edvison</h4>
+        
+            <div id="about-card-bio"><p>Just the way you are</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>二进制、逆向</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover-v1.2.0.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/jquery.js"></script>
+<script src="/assets/js/jquery.fancybox.js"></script>
+<script src="/assets/js/thumbs.js"></script>
+<script src="/assets/js/tranquilpeak.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script src="/live2dw/lib/L2Dwidget.min.js?0c58a1486de42ac6cc1c59c7d98ae887"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","model":{"jsonPath":"/live2dw/assets/wanko.model.json"},"display":{"position":"right","width":100,"height":200},"mobile":{"show":true}});</script></body>
+</html>
