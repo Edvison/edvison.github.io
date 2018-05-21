@@ -80,7 +80,7 @@
                 href="#about">
         
         
-            <img class="header-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+            <img class="header-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
         
         </a>
     
@@ -98,7 +98,7 @@
         
             <div class="sidebar-profile">
                 <a href="/#about">
-                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
                 </a>
                 <h4 class="sidebar-profile-name">Edvison</h4>
                 
@@ -203,10 +203,10 @@
             
                 <li class="sidebar-button">
                     
-                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="E-Mail">
+                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="Mail">
                     
                         <i class="sidebar-button-icon fa fa-lg fa-envelope-o" aria-hidden="true"></i>
-                        <span class="sidebar-button-desc">E-Mail</span>
+                        <span class="sidebar-button-desc">Mail</span>
                     </a>
             </li>
             
@@ -251,7 +251,7 @@
         <div class="post-meta">
     <time datetime="2018-05-12T14:06:12+08:00">
 	
-		    12 May 2018
+		    May 12, 2018
     	
     </time>
     
@@ -269,7 +269,7 @@
     
     <div class="post-content markdown">
         <div class="main-content-wrap">
-            <p>本文是<a href="https://googleprojectzero.blogspot.com/2018/01/reading-privileged-memory-with-side.html" target="_blank" rel="noopener">Reading privileged memory with a side-channel</a>的翻译文章。<br><a id="more"></a><br>首发于先知社区：<a href="https://xz.aliyun.com/t/2273" target="_blank" rel="noopener">https://xz.aliyun.com/t/2273</a><br><h1 id="table-of-contents">Inhaltsverzeichnis</h1><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#前言"><span class="toc-text">前言</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#测试处理器"><span class="toc-text">测试处理器</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#词汇表"><span class="toc-text">词汇表</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#变体1：边界检查旁路"><span class="toc-text">变体1：边界检查旁路</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#理论解释"><span class="toc-text">理论解释</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#内核攻击"><span class="toc-text">内核攻击</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#分支目标注入"><span class="toc-text">分支目标注入</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#基础"><span class="toc-text">基础</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Haswell分支预测内部"><span class="toc-text">Haswell分支预测内部</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#通用预测器"><span class="toc-text">通用预测器</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#间接调用预测器"><span class="toc-text">间接调用预测器</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#逆向工程分支预测器内部"><span class="toc-text">逆向工程分支预测器内部</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#从KVM-guest虚拟机读取主机内存"><span class="toc-text">从KVM guest虚拟机读取主机内存</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#找到主机内核"><span class="toc-text">找到主机内核</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#识别缓存集"><span class="toc-text">识别缓存集</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#查找guest页面的主机虚拟地址"><span class="toc-text">查找guest页面的主机虚拟地址</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#缓存集选择"><span class="toc-text">缓存集选择</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#数据泄露"><span class="toc-text">数据泄露</span></a></li></ol></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#变体3：恶意数据缓存加载"><span class="toc-text">变体3：恶意数据缓存加载</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#进一步研究的想法"><span class="toc-text">进一步研究的想法</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#没有数据高速缓存时序的泄露"><span class="toc-text">没有数据高速缓存时序的泄露</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#其他微架构"><span class="toc-text">其他微架构</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#其他JIT引擎"><span class="toc-text">其他JIT引擎</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#更高效地扫描主机虚拟地址和缓存集"><span class="toc-text">更高效地扫描主机虚拟地址和缓存集</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#倾倒完整的BTB状态"><span class="toc-text">倾倒完整的BTB状态</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#变体2：泄露更有效的gadget"><span class="toc-text">变体2：泄露更有效的gadget</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#各种加速"><span class="toc-text">各种加速</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#使用return预测器泄露或注入"><span class="toc-text">使用return预测器泄露或注入</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#从间接调用预测器泄露数据"><span class="toc-text">从间接调用预测器泄露数据</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#供应商声明"><span class="toc-text">供应商声明</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#英特尔"><span class="toc-text">英特尔</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#AMD"><span class="toc-text">AMD</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#ARM"><span class="toc-text">ARM</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#文献"><span class="toc-text">文献</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#参考"><span class="toc-text">参考</span></a></li></ol></p>
+            <p>本文是<a href="https://googleprojectzero.blogspot.com/2018/01/reading-privileged-memory-with-side.html" target="_blank" rel="noopener">Reading privileged memory with a side-channel</a>的翻译文章。<br><a id="more"></a><br>首发于先知社区：<a href="https://xz.aliyun.com/t/2273" target="_blank" rel="noopener">https://xz.aliyun.com/t/2273</a><br><h1 id="table-of-contents">Table of Contents</h1><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#前言"><span class="toc-text">前言</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#测试处理器"><span class="toc-text">测试处理器</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#词汇表"><span class="toc-text">词汇表</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#变体1：边界检查旁路"><span class="toc-text">变体1：边界检查旁路</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#理论解释"><span class="toc-text">理论解释</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#内核攻击"><span class="toc-text">内核攻击</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#分支目标注入"><span class="toc-text">分支目标注入</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#基础"><span class="toc-text">基础</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Haswell分支预测内部"><span class="toc-text">Haswell分支预测内部</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#通用预测器"><span class="toc-text">通用预测器</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#间接调用预测器"><span class="toc-text">间接调用预测器</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#逆向工程分支预测器内部"><span class="toc-text">逆向工程分支预测器内部</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#从KVM-guest虚拟机读取主机内存"><span class="toc-text">从KVM guest虚拟机读取主机内存</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#找到主机内核"><span class="toc-text">找到主机内核</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#识别缓存集"><span class="toc-text">识别缓存集</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#查找guest页面的主机虚拟地址"><span class="toc-text">查找guest页面的主机虚拟地址</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#缓存集选择"><span class="toc-text">缓存集选择</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#数据泄露"><span class="toc-text">数据泄露</span></a></li></ol></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#变体3：恶意数据缓存加载"><span class="toc-text">变体3：恶意数据缓存加载</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#进一步研究的想法"><span class="toc-text">进一步研究的想法</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#没有数据高速缓存时序的泄露"><span class="toc-text">没有数据高速缓存时序的泄露</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#其他微架构"><span class="toc-text">其他微架构</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#其他JIT引擎"><span class="toc-text">其他JIT引擎</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#更高效地扫描主机虚拟地址和缓存集"><span class="toc-text">更高效地扫描主机虚拟地址和缓存集</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#倾倒完整的BTB状态"><span class="toc-text">倾倒完整的BTB状态</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#变体2：泄露更有效的gadget"><span class="toc-text">变体2：泄露更有效的gadget</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#各种加速"><span class="toc-text">各种加速</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#使用return预测器泄露或注入"><span class="toc-text">使用return预测器泄露或注入</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#从间接调用预测器泄露数据"><span class="toc-text">从间接调用预测器泄露数据</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#供应商声明"><span class="toc-text">供应商声明</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#英特尔"><span class="toc-text">英特尔</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#AMD"><span class="toc-text">AMD</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#ARM"><span class="toc-text">ARM</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#文献"><span class="toc-text">文献</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#参考"><span class="toc-text">参考</span></a></li></ol></p>
 <h1 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h1><p>我们发现，CPU数据高速缓存时序可能会被滥用，从错误推测的执行中高效地泄漏信息，导致（最坏的情况下）各种上下文中跨本地安全边界的任意虚拟内存读取漏洞。</p>
 <p>已知这个问题的变体会影响许多现代处理器，包括英特尔，AMD和ARM的某些处理器。对于少数英特尔和AMD CPU型号，我们有针对真正软件的攻击。我们在2017-06-01向英特尔，AMD和ARM报告了此问题[1] 。</p>
 <p>到目前为止，这个问题有三种已知的变体：</p>
@@ -494,7 +494,7 @@
     <div id="post-footer" class="post-footer main-content-wrap">
         
             <div class="post-footer-tags">
-                <span class="text-color-light text-small">GETAGGT IN</span><br/>
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
                 
     <a class="tag tag--primary tag--small t-link" href="/tags/cpu/">cpu</a> <a class="tag tag--primary tag--small t-link" href="/tags/linux/">linux</a> <a class="tag tag--primary tag--small t-link" href="/tags/内核/">内核</a>
 
@@ -507,18 +507,18 @@
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/在linux内核中利用递归/" data-tooltip="在linux内核中利用递归" aria-label="FRÜHER: 在linux内核中利用递归">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/在linux内核中利用递归/" data-tooltip="在linux内核中利用递归" aria-label="PREVIOUS: 在linux内核中利用递归">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
-                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
                 </a>
             </li>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/elf病毒分析/" data-tooltip="ELF病毒分析" aria-label="NÄCHSTER: ELF病毒分析">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/elf病毒分析/" data-tooltip="ELF病毒分析" aria-label="NEXT: ELF病毒分析">
                 
-                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
                 </a>
             </li>
@@ -526,7 +526,7 @@
     </nav>
     <ul class="post-actions post-action-share">
         <li class="post-action hide-lg hide-md hide-sm">
-            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
                 <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
         </li>
@@ -534,7 +534,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/12/用侧信道读取特权内存/" title="Teilen auf Facebook">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/12/用侧信道读取特权内存/" title="Share on Facebook">
                     <i class="fa fa-facebook-official" aria-hidden="true"></i>
                 </a>
             </li>
@@ -542,7 +542,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/12/用侧信道读取特权内存/" title="Teilen auf Twitter">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/12/用侧信道读取特权内存/" title="Share on Twitter">
                     <i class="fa fa-twitter" aria-hidden="true"></i>
                 </a>
             </li>
@@ -550,7 +550,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/12/用侧信道读取特权内存/" title="Teilen auf Google Plus">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/12/用侧信道读取特权内存/" title="Share on Google+">
                     <i class="fa fa-google-plus" aria-hidden="true"></i>
                 </a>
             </li>
@@ -560,7 +560,7 @@
         
         <li class="post-action">
             
-                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
             
                 <i class="fa fa-list" aria-hidden="true"></i>
             </a>
@@ -593,18 +593,18 @@
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/在linux内核中利用递归/" data-tooltip="在linux内核中利用递归" aria-label="FRÜHER: 在linux内核中利用递归">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/在linux内核中利用递归/" data-tooltip="在linux内核中利用递归" aria-label="PREVIOUS: 在linux内核中利用递归">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
-                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
                 </a>
             </li>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/elf病毒分析/" data-tooltip="ELF病毒分析" aria-label="NÄCHSTER: ELF病毒分析">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/elf病毒分析/" data-tooltip="ELF病毒分析" aria-label="NEXT: ELF病毒分析">
                 
-                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
                 </a>
             </li>
@@ -612,7 +612,7 @@
     </nav>
     <ul class="post-actions post-action-share">
         <li class="post-action hide-lg hide-md hide-sm">
-            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
                 <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
         </li>
@@ -620,7 +620,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/12/用侧信道读取特权内存/" title="Teilen auf Facebook">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/12/用侧信道读取特权内存/" title="Share on Facebook">
                     <i class="fa fa-facebook-official" aria-hidden="true"></i>
                 </a>
             </li>
@@ -628,7 +628,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/12/用侧信道读取特权内存/" title="Teilen auf Twitter">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/12/用侧信道读取特权内存/" title="Share on Twitter">
                     <i class="fa fa-twitter" aria-hidden="true"></i>
                 </a>
             </li>
@@ -636,7 +636,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/12/用侧信道读取特权内存/" title="Teilen auf Google Plus">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/12/用侧信道读取特权内存/" title="Share on Google+">
                     <i class="fa fa-google-plus" aria-hidden="true"></i>
                 </a>
             </li>
@@ -646,7 +646,7 @@
         
         <li class="post-action">
             
-                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
             
                 <i class="fa fa-list" aria-hidden="true"></i>
             </a>
@@ -664,7 +664,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/12/用侧信道读取特权内存/">
-                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Teilen auf Facebook</span>
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Share on Facebook</span>
                 </a>
             </li>
         
@@ -672,7 +672,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/12/用侧信道读取特权内存/">
-                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Teilen auf Twitter</span>
+                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
                 </a>
             </li>
         
@@ -680,7 +680,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/12/用侧信道读取特权内存/">
-                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Teilen auf Google Plus</span>
+                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
                 </a>
             </li>
         
@@ -702,7 +702,7 @@
             <i class="fa fa-remove"></i>
         </div>
         
-            <img id="about-card-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+            <img id="about-card-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
         
             <h4 id="about-card-name">Edvison</h4>
         

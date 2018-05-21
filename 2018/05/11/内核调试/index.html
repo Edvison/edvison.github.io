@@ -85,7 +85,7 @@
                 href="#about">
         
         
-            <img class="header-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+            <img class="header-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
         
         </a>
     
@@ -103,7 +103,7 @@
         
             <div class="sidebar-profile">
                 <a href="/#about">
-                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
                 </a>
                 <h4 class="sidebar-profile-name">Edvison</h4>
                 
@@ -208,10 +208,10 @@
             
                 <li class="sidebar-button">
                     
-                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="E-Mail">
+                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="Mail">
                     
                         <i class="sidebar-button-icon fa fa-lg fa-envelope-o" aria-hidden="true"></i>
-                        <span class="sidebar-button-desc">E-Mail</span>
+                        <span class="sidebar-button-desc">Mail</span>
                     </a>
             </li>
             
@@ -256,7 +256,7 @@
         <div class="post-meta">
     <time datetime="2018-05-11T22:01:55+08:00">
 	
-		    11 May 2018
+		    May 11, 2018
     	
     </time>
     
@@ -277,7 +277,7 @@
             <!-- excerpt --></p>
 <h2 id="0x00-前言"><a href="#0x00-前言" class="headerlink" title="0x00 前言"></a>0x00 前言</h2><p>这段时间开始学习了linux内核提权，也跟进看了一些漏洞。但是由于linux系统版本、内核版本的不同，驱动模块或者是某个函数的加载地址都是不同的，如果不能自己亲自调试内核，就算给了exp也是无法利用。之前也没有怎么接触过内核调试，所以这几天找了许多资料开始学习调试内核的方法，总结整理在这。</p>
 <p>本文测试系统是Ubuntu12.04 64位。</p>
-<p><strong>文章首发于先知社区，<a href="https://xianzhi.aliyun.com/forum/topic/2024" target="_blank" rel="noopener">https://xianzhi.aliyun.com/forum/topic/2024</a></strong><br><h1 id="table-of-contents">Inhaltsverzeichnis</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#0x00-前言"><span class="toc-text">0x00 前言</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x01-准备环境"><span class="toc-text">0x01 准备环境</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x02-使用kvm、gdb调试内核"><span class="toc-text">0x02 使用kvm、gdb调试内核</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x03-用gdb和qemu调试内核"><span class="toc-text">0x03 用gdb和qemu调试内核</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x04-用kdb和kgdb调试内核驱动模块"><span class="toc-text">0x04 用kdb和kgdb调试内核驱动模块</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x05-参考链接"><span class="toc-text">0x05 参考链接</span></a></li></ol></p>
+<p><strong>文章首发于先知社区，<a href="https://xianzhi.aliyun.com/forum/topic/2024" target="_blank" rel="noopener">https://xianzhi.aliyun.com/forum/topic/2024</a></strong><br><h1 id="table-of-contents">Table of Contents</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#0x00-前言"><span class="toc-text">0x00 前言</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x01-准备环境"><span class="toc-text">0x01 准备环境</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x02-使用kvm、gdb调试内核"><span class="toc-text">0x02 使用kvm、gdb调试内核</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x03-用gdb和qemu调试内核"><span class="toc-text">0x03 用gdb和qemu调试内核</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x04-用kdb和kgdb调试内核驱动模块"><span class="toc-text">0x04 用kdb和kgdb调试内核驱动模块</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x05-参考链接"><span class="toc-text">0x05 参考链接</span></a></li></ol></p>
 <h2 id="0x01-准备环境"><a href="#0x01-准备环境" class="headerlink" title="0x01 准备环境"></a>0x01 准备环境</h2><p>首先当然是准备需要调试的内核版本，linux的所有历史版本都可以在<a href="https://www.kernel.org/pub/linux/kernel/" target="_blank" rel="noopener">这里</a>找到。</p>
 <p>down下来后进入源码树根目录，开始配置内核，这里使用基于ncurse库编制的图形界面工具：</p>
 <pre><code>make menuconfig
@@ -370,7 +370,7 @@ Countinuing.  //让虚拟机重新跑起来
     <div id="post-footer" class="post-footer main-content-wrap">
         
             <div class="post-footer-tags">
-                <span class="text-color-light text-small">GETAGGT IN</span><br/>
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
                 
     <a class="tag tag--primary tag--small t-link" href="/tags/linux/">linux</a> <a class="tag tag--primary tag--small t-link" href="/tags/内核/">内核</a> <a class="tag tag--primary tag--small t-link" href="/tags/调试/">调试</a>
 
@@ -383,18 +383,18 @@ Countinuing.  //让虚拟机重新跑起来
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/elf病毒分析/" data-tooltip="ELF病毒分析" aria-label="FRÜHER: ELF病毒分析">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/elf病毒分析/" data-tooltip="ELF病毒分析" aria-label="PREVIOUS: ELF病毒分析">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
-                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
                 </a>
             </li>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/11/内核驱动程序mmap处理程序利用/" data-tooltip="mmap处理程序利用" aria-label="NÄCHSTER: mmap处理程序利用">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/11/内核驱动程序mmap处理程序利用/" data-tooltip="mmap处理程序利用" aria-label="NEXT: mmap处理程序利用">
                 
-                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
                 </a>
             </li>
@@ -402,7 +402,7 @@ Countinuing.  //让虚拟机重新跑起来
     </nav>
     <ul class="post-actions post-action-share">
         <li class="post-action hide-lg hide-md hide-sm">
-            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
                 <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
         </li>
@@ -410,7 +410,7 @@ Countinuing.  //让虚拟机重新跑起来
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/11/内核调试/" title="Teilen auf Facebook">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/11/内核调试/" title="Share on Facebook">
                     <i class="fa fa-facebook-official" aria-hidden="true"></i>
                 </a>
             </li>
@@ -418,7 +418,7 @@ Countinuing.  //让虚拟机重新跑起来
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/11/内核调试/" title="Teilen auf Twitter">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/11/内核调试/" title="Share on Twitter">
                     <i class="fa fa-twitter" aria-hidden="true"></i>
                 </a>
             </li>
@@ -426,7 +426,7 @@ Countinuing.  //让虚拟机重新跑起来
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/11/内核调试/" title="Teilen auf Google Plus">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/11/内核调试/" title="Share on Google+">
                     <i class="fa fa-google-plus" aria-hidden="true"></i>
                 </a>
             </li>
@@ -436,7 +436,7 @@ Countinuing.  //让虚拟机重新跑起来
         
         <li class="post-action">
             
-                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
             
                 <i class="fa fa-list" aria-hidden="true"></i>
             </a>
@@ -469,18 +469,18 @@ Countinuing.  //让虚拟机重新跑起来
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/elf病毒分析/" data-tooltip="ELF病毒分析" aria-label="FRÜHER: ELF病毒分析">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/elf病毒分析/" data-tooltip="ELF病毒分析" aria-label="PREVIOUS: ELF病毒分析">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
-                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
                 </a>
             </li>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/11/内核驱动程序mmap处理程序利用/" data-tooltip="mmap处理程序利用" aria-label="NÄCHSTER: mmap处理程序利用">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/11/内核驱动程序mmap处理程序利用/" data-tooltip="mmap处理程序利用" aria-label="NEXT: mmap处理程序利用">
                 
-                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
                 </a>
             </li>
@@ -488,7 +488,7 @@ Countinuing.  //让虚拟机重新跑起来
     </nav>
     <ul class="post-actions post-action-share">
         <li class="post-action hide-lg hide-md hide-sm">
-            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
                 <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
         </li>
@@ -496,7 +496,7 @@ Countinuing.  //让虚拟机重新跑起来
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/11/内核调试/" title="Teilen auf Facebook">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/11/内核调试/" title="Share on Facebook">
                     <i class="fa fa-facebook-official" aria-hidden="true"></i>
                 </a>
             </li>
@@ -504,7 +504,7 @@ Countinuing.  //让虚拟机重新跑起来
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/11/内核调试/" title="Teilen auf Twitter">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/11/内核调试/" title="Share on Twitter">
                     <i class="fa fa-twitter" aria-hidden="true"></i>
                 </a>
             </li>
@@ -512,7 +512,7 @@ Countinuing.  //让虚拟机重新跑起来
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/11/内核调试/" title="Teilen auf Google Plus">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/11/内核调试/" title="Share on Google+">
                     <i class="fa fa-google-plus" aria-hidden="true"></i>
                 </a>
             </li>
@@ -522,7 +522,7 @@ Countinuing.  //让虚拟机重新跑起来
         
         <li class="post-action">
             
-                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
             
                 <i class="fa fa-list" aria-hidden="true"></i>
             </a>
@@ -540,7 +540,7 @@ Countinuing.  //让虚拟机重新跑起来
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/11/内核调试/">
-                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Teilen auf Facebook</span>
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Share on Facebook</span>
                 </a>
             </li>
         
@@ -548,7 +548,7 @@ Countinuing.  //让虚拟机重新跑起来
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/11/内核调试/">
-                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Teilen auf Twitter</span>
+                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
                 </a>
             </li>
         
@@ -556,7 +556,7 @@ Countinuing.  //让虚拟机重新跑起来
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/11/内核调试/">
-                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Teilen auf Google Plus</span>
+                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
                 </a>
             </li>
         
@@ -578,7 +578,7 @@ Countinuing.  //让虚拟机重新跑起来
             <i class="fa fa-remove"></i>
         </div>
         
-            <img id="about-card-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+            <img id="about-card-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
         
             <h4 id="about-card-name">Edvison</h4>
         

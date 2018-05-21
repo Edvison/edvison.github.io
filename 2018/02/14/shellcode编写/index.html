@@ -84,7 +84,7 @@
                 href="#about">
         
         
-            <img class="header-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+            <img class="header-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
         
         </a>
     
@@ -102,7 +102,7 @@
         
             <div class="sidebar-profile">
                 <a href="/#about">
-                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
                 </a>
                 <h4 class="sidebar-profile-name">Edvison</h4>
                 
@@ -207,10 +207,10 @@
             
                 <li class="sidebar-button">
                     
-                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="E-Mail">
+                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="Mail">
                     
                         <i class="sidebar-button-icon fa fa-lg fa-envelope-o" aria-hidden="true"></i>
-                        <span class="sidebar-button-desc">E-Mail</span>
+                        <span class="sidebar-button-desc">Mail</span>
                     </a>
             </li>
             
@@ -255,7 +255,7 @@
         <div class="post-meta">
     <time datetime="2018-02-14T18:51:39+08:00">
 	
-		    14 Feb 2018
+		    Feb 14, 2018
     	
     </time>
     
@@ -274,7 +274,7 @@
     <div class="post-content markdown">
         <div class="main-content-wrap">
             <!-- excerpt --></p>
-<h1 id="table-of-contents">Inhaltsverzeichnis</h1><ol class="toc"><li class="toc-item toc-level-3"><a class="toc-link" href="#0x01-理解系统调用"><span class="toc-text">0x01 理解系统调用</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#0x02-为exit-系统调用写shellcode"><span class="toc-text">0x02 为exit()系统调用写shellcode</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#0x03-编写execve-的shellcode"><span class="toc-text">0x03 编写execve()的shellcode</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#0x04-参考链接"><span class="toc-text">0x04 参考链接</span></a></li></ol>
+<h1 id="table-of-contents">Table of Contents</h1><ol class="toc"><li class="toc-item toc-level-3"><a class="toc-link" href="#0x01-理解系统调用"><span class="toc-text">0x01 理解系统调用</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#0x02-为exit-系统调用写shellcode"><span class="toc-text">0x02 为exit()系统调用写shellcode</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#0x03-编写execve-的shellcode"><span class="toc-text">0x03 编写execve()的shellcode</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#0x04-参考链接"><span class="toc-text">0x04 参考链接</span></a></li></ol>
 <h3 id="0x01-理解系统调用"><a href="#0x01-理解系统调用" class="headerlink" title="0x01 理解系统调用"></a><strong>0x01 理解系统调用</strong></h3><p>shellcode是一组可注入的指令，可以在被攻击的程序中运行。由于shellcode要直接操作寄存器和函数，所以必须是十六进制的形式。<br>那么为什么要写shellcode呢？因为我们要让目标程序以不同于设计者预期的方式运行，而操作的程序的方法之一就是强制它产生系统调用（system,call,syscall)。通过系统调用，你可以直接访问系统内核。<br>在Linux里有两个方法来执行系统调用，间接的方法是c函数包装（libc），直接的方法是用汇编指令（通过把适当的参数加载到寄存器，然后调用int 0x80软中断）</p>
 <p>废话不多说，我们先来看看最常见的系统调用exit()，就是终止当前进程。<br><strong> (注：本文测试系统是ubuntu-17.04 x86）</strong></p>
 <pre><code>main()
@@ -358,7 +358,7 @@ main()
     <div id="post-footer" class="post-footer main-content-wrap">
         
             <div class="post-footer-tags">
-                <span class="text-color-light text-small">GETAGGT IN</span><br/>
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
                 
     <a class="tag tag--primary tag--small t-link" href="/tags/linux/">linux</a> <a class="tag tag--primary tag--small t-link" href="/tags/pwn/">pwn</a> <a class="tag tag--primary tag--small t-link" href="/tags/shellcode/">shellcode</a>
 
@@ -371,18 +371,18 @@ main()
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/10/linux内核提权/" data-tooltip="入门学习Linux内核提权" aria-label="FRÜHER: 入门学习Linux内核提权">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/10/linux内核提权/" data-tooltip="入门学习Linux内核提权" aria-label="PREVIOUS: 入门学习Linux内核提权">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
-                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
                 </a>
             </li>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2017/11/05/pwnable_1/" data-tooltip="pwnable第一区write up" aria-label="NÄCHSTER: pwnable第一区write up">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2017/11/05/pwnable_1/" data-tooltip="pwnable第一区write up" aria-label="NEXT: pwnable第一区write up">
                 
-                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
                 </a>
             </li>
@@ -390,7 +390,7 @@ main()
     </nav>
     <ul class="post-actions post-action-share">
         <li class="post-action hide-lg hide-md hide-sm">
-            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
                 <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
         </li>
@@ -398,7 +398,7 @@ main()
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/02/14/shellcode编写/" title="Teilen auf Facebook">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/02/14/shellcode编写/" title="Share on Facebook">
                     <i class="fa fa-facebook-official" aria-hidden="true"></i>
                 </a>
             </li>
@@ -406,7 +406,7 @@ main()
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/02/14/shellcode编写/" title="Teilen auf Twitter">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/02/14/shellcode编写/" title="Share on Twitter">
                     <i class="fa fa-twitter" aria-hidden="true"></i>
                 </a>
             </li>
@@ -414,7 +414,7 @@ main()
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/02/14/shellcode编写/" title="Teilen auf Google Plus">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/02/14/shellcode编写/" title="Share on Google+">
                     <i class="fa fa-google-plus" aria-hidden="true"></i>
                 </a>
             </li>
@@ -424,7 +424,7 @@ main()
         
         <li class="post-action">
             
-                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
             
                 <i class="fa fa-list" aria-hidden="true"></i>
             </a>
@@ -457,18 +457,18 @@ main()
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/10/linux内核提权/" data-tooltip="入门学习Linux内核提权" aria-label="FRÜHER: 入门学习Linux内核提权">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/10/linux内核提权/" data-tooltip="入门学习Linux内核提权" aria-label="PREVIOUS: 入门学习Linux内核提权">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
-                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
                 </a>
             </li>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2017/11/05/pwnable_1/" data-tooltip="pwnable第一区write up" aria-label="NÄCHSTER: pwnable第一区write up">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2017/11/05/pwnable_1/" data-tooltip="pwnable第一区write up" aria-label="NEXT: pwnable第一区write up">
                 
-                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
                 </a>
             </li>
@@ -476,7 +476,7 @@ main()
     </nav>
     <ul class="post-actions post-action-share">
         <li class="post-action hide-lg hide-md hide-sm">
-            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
                 <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
         </li>
@@ -484,7 +484,7 @@ main()
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/02/14/shellcode编写/" title="Teilen auf Facebook">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/02/14/shellcode编写/" title="Share on Facebook">
                     <i class="fa fa-facebook-official" aria-hidden="true"></i>
                 </a>
             </li>
@@ -492,7 +492,7 @@ main()
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/02/14/shellcode编写/" title="Teilen auf Twitter">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/02/14/shellcode编写/" title="Share on Twitter">
                     <i class="fa fa-twitter" aria-hidden="true"></i>
                 </a>
             </li>
@@ -500,7 +500,7 @@ main()
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/02/14/shellcode编写/" title="Teilen auf Google Plus">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/02/14/shellcode编写/" title="Share on Google+">
                     <i class="fa fa-google-plus" aria-hidden="true"></i>
                 </a>
             </li>
@@ -510,7 +510,7 @@ main()
         
         <li class="post-action">
             
-                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
             
                 <i class="fa fa-list" aria-hidden="true"></i>
             </a>
@@ -528,7 +528,7 @@ main()
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/02/14/shellcode编写/">
-                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Teilen auf Facebook</span>
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Share on Facebook</span>
                 </a>
             </li>
         
@@ -536,7 +536,7 @@ main()
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/02/14/shellcode编写/">
-                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Teilen auf Twitter</span>
+                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
                 </a>
             </li>
         
@@ -544,7 +544,7 @@ main()
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/02/14/shellcode编写/">
-                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Teilen auf Google Plus</span>
+                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
                 </a>
             </li>
         
@@ -566,7 +566,7 @@ main()
             <i class="fa fa-remove"></i>
         </div>
         
-            <img id="about-card-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+            <img id="about-card-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
         
             <h4 id="about-card-name">Edvison</h4>
         
