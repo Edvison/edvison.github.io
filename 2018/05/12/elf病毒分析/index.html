@@ -75,7 +75,7 @@
                 href="#about">
         
         
-            <img class="header-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
+            <img class="header-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
         
         </a>
     
@@ -93,7 +93,7 @@
         
             <div class="sidebar-profile">
                 <a href="/#about">
-                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
+                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
                 </a>
                 <h4 class="sidebar-profile-name">Edvison</h4>
                 
@@ -198,10 +198,10 @@
             
                 <li class="sidebar-button">
                     
-                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="Mail">
+                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="E-Mail">
                     
                         <i class="sidebar-button-icon fa fa-lg fa-envelope-o" aria-hidden="true"></i>
-                        <span class="sidebar-button-desc">Mail</span>
+                        <span class="sidebar-button-desc">E-Mail</span>
                     </a>
             </li>
             
@@ -246,7 +246,7 @@
         <div class="post-meta">
     <time datetime="2018-05-12T14:00:20+08:00">
 	
-		    May 12, 2018
+		    12 May 2018
     	
     </time>
     
@@ -267,7 +267,7 @@
             <!-- excerpt --></p>
 <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>说起病毒大家肯定都很熟悉，但大多数人想起的一定是windows平台下病毒，而对linux下的病毒熟悉的人却少之又少。<br>之前在学习ELF文件格式的时候了解到ELF病毒的存在，现在让我们来花点时间深入学习下ELF病毒吧:)</p>
 <p>*本文首发于先知社区：<a href="https://xz.aliyun.com/t/2254" target="_blank" rel="noopener">https://xz.aliyun.com/t/2254</a></p>
-<h1 id="table-of-contents">Table of Contents</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#前言"><span class="toc-text">前言</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#1-ELF二进制格式"><span class="toc-text">1. ELF二进制格式</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#1-1-elf文件类型"><span class="toc-text">1.1 elf文件类型</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#1-2-ELF头"><span class="toc-text">1.2 ELF头</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#1-3-节头"><span class="toc-text">1.3 节头</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#1-4-ELF程序头"><span class="toc-text">1.4 ELF程序头</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-ELF病毒技术"><span class="toc-text">2.ELF病毒技术</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#2-1-ELF病毒原理"><span class="toc-text">2.1 ELF病毒原理</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-设计ELF病毒的关键问题"><span class="toc-text">2.2 设计ELF病毒的关键问题</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-ELF病毒寄生代码感染方法"><span class="toc-text">3.ELF病毒寄生代码感染方法</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#3-1-Silvio填充感染"><span class="toc-text">3.1 Silvio填充感染</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-2-逆向text感染"><span class="toc-text">3.2 逆向text感染</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-3-data段感染"><span class="toc-text">3.3 data段感染</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#4-系统调用"><span class="toc-text">4.系统调用</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-LPV病毒分析"><span class="toc-text">5.LPV病毒分析</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-参考"><span class="toc-text">6.参考</span></a></li></ol>
+<h1 id="table-of-contents">Inhaltsverzeichnis</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#前言"><span class="toc-text">前言</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#1-ELF二进制格式"><span class="toc-text">1. ELF二进制格式</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#1-1-elf文件类型"><span class="toc-text">1.1 elf文件类型</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#1-2-ELF头"><span class="toc-text">1.2 ELF头</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#1-3-节头"><span class="toc-text">1.3 节头</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#1-4-ELF程序头"><span class="toc-text">1.4 ELF程序头</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-ELF病毒技术"><span class="toc-text">2.ELF病毒技术</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#2-1-ELF病毒原理"><span class="toc-text">2.1 ELF病毒原理</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-设计ELF病毒的关键问题"><span class="toc-text">2.2 设计ELF病毒的关键问题</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-ELF病毒寄生代码感染方法"><span class="toc-text">3.ELF病毒寄生代码感染方法</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#3-1-Silvio填充感染"><span class="toc-text">3.1 Silvio填充感染</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-2-逆向text感染"><span class="toc-text">3.2 逆向text感染</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-3-data段感染"><span class="toc-text">3.3 data段感染</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#4-系统调用"><span class="toc-text">4.系统调用</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-LPV病毒分析"><span class="toc-text">5.LPV病毒分析</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-参考"><span class="toc-text">6.参考</span></a></li></ol>
 <h2 id="1-ELF二进制格式"><a href="#1-ELF二进制格式" class="headerlink" title="1. ELF二进制格式"></a>1. ELF二进制格式</h2><h3 id="1-1-elf文件类型"><a href="#1-1-elf文件类型" class="headerlink" title="1.1 elf文件类型"></a>1.1 elf文件类型</h3><p>ELF文件可以被标记为下面几种类型：</p>
 <ul>
 <li>ET_NONE：未知类型。</li>
@@ -363,7 +363,7 @@
     <div id="post-footer" class="post-footer main-content-wrap">
         
             <div class="post-footer-tags">
-                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                <span class="text-color-light text-small">GETAGGT IN</span><br/>
                 
     <a class="tag tag--primary tag--small t-link" href="/tags/elf/">elf</a> <a class="tag tag--primary tag--small t-link" href="/tags/linux/">linux</a> <a class="tag tag--primary tag--small t-link" href="/tags/病毒/">病毒</a>
 
@@ -376,18 +376,18 @@
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/用侧信道读取特权内存/" data-tooltip="用侧信道（side-channel）读取特权内存" aria-label="PREVIOUS: 用侧信道（side-channel）读取特权内存">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/用侧信道读取特权内存/" data-tooltip="用侧信道（side-channel）读取特权内存" aria-label="FRÜHER: 用侧信道（side-channel）读取特权内存">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
-                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
                 </a>
             </li>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/11/内核调试/" data-tooltip="Linux内核调试" aria-label="NEXT: Linux内核调试">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/11/内核调试/" data-tooltip="Linux内核调试" aria-label="NÄCHSTER: Linux内核调试">
                 
-                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
                 </a>
             </li>
@@ -395,7 +395,7 @@
     </nav>
     <ul class="post-actions post-action-share">
         <li class="post-action hide-lg hide-md hide-sm">
-            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
                 <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
         </li>
@@ -403,7 +403,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/12/elf病毒分析/" title="Share on Facebook">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/12/elf病毒分析/" title="Teilen auf Facebook">
                     <i class="fa fa-facebook-official" aria-hidden="true"></i>
                 </a>
             </li>
@@ -411,7 +411,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/12/elf病毒分析/" title="Share on Twitter">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/12/elf病毒分析/" title="Teilen auf Twitter">
                     <i class="fa fa-twitter" aria-hidden="true"></i>
                 </a>
             </li>
@@ -419,7 +419,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/12/elf病毒分析/" title="Share on Google+">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/12/elf病毒分析/" title="Teilen auf Google Plus">
                     <i class="fa fa-google-plus" aria-hidden="true"></i>
                 </a>
             </li>
@@ -429,7 +429,7 @@
         
         <li class="post-action">
             
-                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
             
                 <i class="fa fa-list" aria-hidden="true"></i>
             </a>
@@ -462,18 +462,18 @@
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/用侧信道读取特权内存/" data-tooltip="用侧信道（side-channel）读取特权内存" aria-label="PREVIOUS: 用侧信道（side-channel）读取特权内存">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/用侧信道读取特权内存/" data-tooltip="用侧信道（side-channel）读取特权内存" aria-label="FRÜHER: 用侧信道（side-channel）读取特权内存">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
-                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
                 </a>
             </li>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/11/内核调试/" data-tooltip="Linux内核调试" aria-label="NEXT: Linux内核调试">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/11/内核调试/" data-tooltip="Linux内核调试" aria-label="NÄCHSTER: Linux内核调试">
                 
-                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
                 </a>
             </li>
@@ -481,7 +481,7 @@
     </nav>
     <ul class="post-actions post-action-share">
         <li class="post-action hide-lg hide-md hide-sm">
-            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
                 <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
         </li>
@@ -489,7 +489,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/12/elf病毒分析/" title="Share on Facebook">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/12/elf病毒分析/" title="Teilen auf Facebook">
                     <i class="fa fa-facebook-official" aria-hidden="true"></i>
                 </a>
             </li>
@@ -497,7 +497,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/12/elf病毒分析/" title="Share on Twitter">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/12/elf病毒分析/" title="Teilen auf Twitter">
                     <i class="fa fa-twitter" aria-hidden="true"></i>
                 </a>
             </li>
@@ -505,7 +505,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/12/elf病毒分析/" title="Share on Google+">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/12/elf病毒分析/" title="Teilen auf Google Plus">
                     <i class="fa fa-google-plus" aria-hidden="true"></i>
                 </a>
             </li>
@@ -515,7 +515,7 @@
         
         <li class="post-action">
             
-                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
             
                 <i class="fa fa-list" aria-hidden="true"></i>
             </a>
@@ -533,7 +533,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/12/elf病毒分析/">
-                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Share on Facebook</span>
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Teilen auf Facebook</span>
                 </a>
             </li>
         
@@ -541,7 +541,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/12/elf病毒分析/">
-                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
+                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Teilen auf Twitter</span>
                 </a>
             </li>
         
@@ -549,7 +549,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/12/elf病毒分析/">
-                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
+                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Teilen auf Google Plus</span>
                 </a>
             </li>
         
@@ -571,7 +571,7 @@
             <i class="fa fa-remove"></i>
         </div>
         
-            <img id="about-card-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
+            <img id="about-card-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
         
             <h4 id="about-card-name">Edvison</h4>
         

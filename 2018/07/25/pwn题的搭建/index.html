@@ -1,0 +1,534 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hans">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Edvison&#39;s blog">
+    <title>pwn题的搭建 - Edvison&#39;s blog</title>
+    <meta name="author" content="Edvison">
+    
+    
+        <link rel="icon" href="http://edvison.cn/assets/images/favicon.ico">
+    
+    
+        <link rel="alternate" type="application/atom+xml" title="RSS" href="/atom.xml">
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Edvison","sameAs":["https://github.com/edvison","mailto:edvisonmail@163.com"],"image":"1.png"},"articleBody":"整理一下以前搭Pwn题的笔记（\n\npwn题准备1.关闭地址空间随机化PIE（ASLR）一般情况下NX（Windows平台上称其为DEP）和地址空间分布随机化（ASLR）会同时工作。用下面这个命令关闭ASLR（开启是2）：1sudo -s echo 0 &gt; /proc/sys/kernel/randomize_va_space\n但是这样关闭了所有程序的随机化还是有一定的风险的，所以可以在程序编译的时候增加参数-no-pie关闭程序的pie，只关闭此程序的随机化，而其它的程序不变\n2.编译pwn程序12345678910gcc -fno-stack-protector -z execstack -mpreferred-stack-boundary=4 -no-pie -o pwn1 pwn1.c#Ubuntu下面的GCC默认开启了Stack Smashing Protector，#如果想在这个系统中学习缓冲区溢出的原理，在编译时要加上fno-stack-protector选项#否则运行时会出现*** stack smashing detected ***: xxx terminated，#而不是期望的Segmentation fault。同时还需要加上允许栈执行的选项。#-no-pie 关闭aslr#-fno-stack-protector用来关闭gcc编译器gs验证码机制, 禁用栈保护#-z execstack用来关闭ld链接器堆栈段不可执行机制,关闭NX\n如果要开启NX，用下面这个编译：1gcc -fno-stack-protector -mpreferred-stack-boundary=4 -no-pie -o pwn1 pwn1.c\n挂载程序到服务器端口12sudo apt-get install socatsocat tcp-l:端口号,fork exec:程序位置\njio本：123#!/bin/sh#name:pwn1.shsocat tcp-l:9999,fork exec:./pwn1\n用nohup挂起：1$ nohup ./pwn.sh &amp;\n注意运行一次socat该端口就被占用了，要取消就要kill这个进程。\n远程服务器cmd用mstsc命令打开远程连接服务器，将题目部署到服务器上。注意端口设置就好。\nawd pwn几个重要的点1、web、pwn权限是不能串的，不然就是pwn打进来直接弄web2、gamebox需要对pwn和web都可以进行管理3、gamebox对web目录进行文件覆盖的时候，会导致权限错乱\n权限设置权限绝对不能乱，要严格控制好，不然人家从这个目录进来打到了flag出去到另一个目录能看到另一题的flag就尴尬了= =最好是不同题目用不同用户挂载起来（用哪个用户挂的题进来就是这个用户的权限）\n\n一些特殊的文件权限设置12345678chattr +a file1 #只允许以追加方式读写文件(就是不能删除文件)chattr +c file1 #允许这个文件能被内核自动压缩/解压 chattr +d file1 #在进行文件系统备份时，dump程序将忽略这个文件 chattr +i file1  #设置成不可变的文件，不能被删除、修改、重命名或者链接 chattr +s file1 #允许一个文件被安全地删除 chattr +S file1 #一旦应用程序对这个文件执行了写操作，使系统立刻把修改的结果写到磁盘 chattr +u file1 #若文件被删除，系统会允许你在以后恢复这个被删除的文件 lsattr #显示特殊属性\n\n\nssh命令将文件从服务器拷贝到本地：1scp -P 1111 awd@xxx.xxx.xxx.xxx:/home/awd /home/edvison //注意P要大写\n将文件从本地发送到服务器：1scp -P 1111 /home/edvison awd@xxx.xxx.xxx.xxx:/home/awd\n要传整个目录就加个-r参数就好\n参考链接http://www.jianshu.com/p/a659924515f7http://yunnigu.dropsec.xyz/2016/10/08/checksec%E5%8F%8A%E5%85%B6%E5%8C%85%E5%90%AB%E7%9A%84%E4%BF%9D%E6%8A%A4%E6%9C%BA%E5%88%B6/#checksec及其包含的保护机制linux程序的常用保护机制:https://introspelliam.github.io/2017/09/30/linux%E7%A8%8B%E5%BA%8F%E7%9A%84%E5%B8%B8%E7%94%A8%E4%BF%9D%E6%8A%A4%E6%9C%BA%E5%88%B6/ssh配置：https://github.com/hehongwei44/my-blog/issues/4\n","dateCreated":"2018-07-25T18:11:45+08:00","dateModified":"2018-07-25T18:14:39+08:00","datePublished":"2018-07-25T18:11:45+08:00","description":"整理一下以前搭Pwn题的笔记（","headline":"pwn题的搭建","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://edvison.cn/2018/07/25/pwn题的搭建/"},"publisher":{"@type":"Organization","name":"Edvison","sameAs":["https://github.com/edvison","mailto:edvisonmail@163.com"],"image":"1.png","logo":{"@type":"ImageObject","url":"1.png"}},"url":"http://edvison.cn/2018/07/25/pwn题的搭建/","keywords":"pwn, linux"}</script>
+    <meta name="description" content="整理一下以前搭Pwn题的笔记（">
+<meta name="keywords" content="pwn,linux">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="pwn题的搭建">
+<meta property="og:url" content="http://edvison.cn/2018/07/25/pwn题的搭建/index.html">
+<meta property="og:site_name" content="Edvison&#39;s blog">
+<meta property="og:description" content="整理一下以前搭Pwn题的笔记（">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2018-07-25T10:14:39.645Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="pwn题的搭建">
+<meta name="twitter:description" content="整理一下以前搭Pwn题的笔记（">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://edvison.cn/assets/images/1.png"/>
+    
+    
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/font-awesome.css">
+    <link rel="stylesheet" href="/assets/css/jquery.fancybox.css">
+    <link rel="stylesheet" href="/assets/css/thumbs.css">
+    <link rel="stylesheet" href="/assets/css/tranquilpeak.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="5">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Edvison&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="5">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+                </a>
+                <h4 class="sidebar-profile-name">Edvison</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>Just the way you are</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link open-algolia-search"
+                             href="#search"
+                            
+                            title="search"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-search" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">search</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="about"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">about</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/edvison" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="E-Mail">
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-envelope-o" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">E-Mail</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/atom.xml"
+                            
+                            title="RSS"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-rss" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">RSS</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+            <div id="main" data-behavior="5"
+                 class="
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+        <div class="post-header main-content-wrap text-left">
+    
+        <h1 class="post-title">
+            pwn题的搭建
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2018-07-25T18:11:45+08:00">
+	
+		    25 Jul 2018
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/pwn/">pwn</a>
+
+
+    
+</div>
+
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>整理一下以前搭Pwn题的笔记（<br><a id="more"></a></p>
+<h1 id="table-of-contents">Inhaltsverzeichnis</h1><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#pwn题准备"><span class="toc-text">pwn题准备</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#挂载程序到服务器端口"><span class="toc-text">挂载程序到服务器端口</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#远程服务器"><span class="toc-text">远程服务器</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#awd-pwn"><span class="toc-text">awd pwn</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#权限设置"><span class="toc-text">权限设置</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#ssh命令"><span class="toc-text">ssh命令</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#参考链接"><span class="toc-text">参考链接</span></a></li></ol>
+<h1 id="pwn题准备"><a href="#pwn题准备" class="headerlink" title="pwn题准备"></a>pwn题准备</h1><p>1.关闭地址空间随机化PIE（ASLR）<br>一般情况下NX（Windows平台上称其为DEP）和地址空间分布随机化（ASLR）会同时工作。<br>用下面这个命令关闭ASLR（开启是2）：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo -s echo 0 &gt; /proc/sys/kernel/randomize_va_space</span><br></pre></td></tr></table></figure></p>
+<p>但是这样关闭了所有程序的随机化还是有一定的风险的，所以可以在程序编译的时候增加参数-no-pie关闭程序的pie，只关闭此程序的随机化，而其它的程序不变</p>
+<p>2.编译pwn程序<br><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">gcc -fno-stack-protector -z execstack -mpreferred-stack-boundary=4 -no-pie -o pwn1 pwn1.c</span><br><span class="line"></span><br><span class="line"><span class="meta">#</span>Ubuntu下面的GCC默认开启了Stack Smashing Protector，</span><br><span class="line"><span class="meta">#</span>如果想在这个系统中学习缓冲区溢出的原理，在编译时要加上fno-stack-protector选项</span><br><span class="line"><span class="meta">#</span>否则运行时会出现*** stack smashing detected ***: xxx terminated，</span><br><span class="line"><span class="meta">#</span>而不是期望的Segmentation fault。同时还需要加上允许栈执行的选项。</span><br><span class="line"></span><br><span class="line"><span class="meta">#</span>-no-pie 关闭aslr</span><br><span class="line"><span class="meta">#</span>-fno-stack-protector用来关闭gcc编译器gs验证码机制, 禁用栈保护</span><br><span class="line"><span class="meta">#</span>-z execstack用来关闭ld链接器堆栈段不可执行机制,关闭NX</span><br></pre></td></tr></table></figure></p>
+<p>如果要开启NX，用下面这个编译：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">gcc -fno-stack-protector -mpreferred-stack-boundary=4 -no-pie -o pwn1 pwn1.c</span><br></pre></td></tr></table></figure></p>
+<h1 id="挂载程序到服务器端口"><a href="#挂载程序到服务器端口" class="headerlink" title="挂载程序到服务器端口"></a>挂载程序到服务器端口</h1><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">sudo apt-get install socat</span><br><span class="line">socat tcp-l:端口号,fork exec:程序位置</span><br></pre></td></tr></table></figure>
+<p>jio本：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">#!/bin/sh</span><br><span class="line">#name:pwn1.sh</span><br><span class="line">socat tcp-l:9999,fork exec:./pwn1</span><br></pre></td></tr></table></figure></p>
+<p>用nohup挂起：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ nohup ./pwn.sh &amp;</span><br></pre></td></tr></table></figure></p>
+<p><em>注意运行一次socat该端口就被占用了，要取消就要kill这个进程。</em></p>
+<h1 id="远程服务器"><a href="#远程服务器" class="headerlink" title="远程服务器"></a>远程服务器</h1><p>cmd用mstsc命令打开远程连接服务器，将题目部署到服务器上。注意端口设置就好。</p>
+<h1 id="awd-pwn"><a href="#awd-pwn" class="headerlink" title="awd pwn"></a>awd pwn</h1><p><em>几个重要的点</em><br>1、web、pwn权限是不能串的，不然就是pwn打进来直接弄web<br>2、gamebox需要对pwn和web都可以进行管理<br>3、gamebox对web目录进行文件覆盖的时候，会导致权限错乱</p>
+<h2 id="权限设置"><a href="#权限设置" class="headerlink" title="权限设置"></a>权限设置</h2><p>权限绝对不能乱，要严格控制好，不然人家从这个目录进来打到了flag出去到另一个目录能看到另一题的flag就尴尬了= =<br>最好是不同题目用不同用户挂载起来（用哪个用户挂的题进来就是这个用户的权限）</p>
+<ul>
+<li>一些特殊的文件权限设置<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">chattr +a file1 #只允许以追加方式读写文件(就是不能删除文件)</span><br><span class="line">chattr +c file1 #允许这个文件能被内核自动压缩/解压 </span><br><span class="line">chattr +d file1 #在进行文件系统备份时，dump程序将忽略这个文件 </span><br><span class="line">chattr +i file1  #设置成不可变的文件，不能被删除、修改、重命名或者链接 </span><br><span class="line">chattr +s file1 #允许一个文件被安全地删除 </span><br><span class="line">chattr +S file1 #一旦应用程序对这个文件执行了写操作，使系统立刻把修改的结果写到磁盘 </span><br><span class="line">chattr +u file1 #若文件被删除，系统会允许你在以后恢复这个被删除的文件 </span><br><span class="line">lsattr #显示特殊属性</span><br></pre></td></tr></table></figure>
+</li>
+</ul>
+<h2 id="ssh命令"><a href="#ssh命令" class="headerlink" title="ssh命令"></a>ssh命令</h2><p>将文件从服务器拷贝到本地：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">scp -P 1111 awd@xxx.xxx.xxx.xxx:/home/awd /home/edvison //注意P要大写</span><br></pre></td></tr></table></figure></p>
+<p>将文件从本地发送到服务器：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">scp -P 1111 /home/edvison awd@xxx.xxx.xxx.xxx:/home/awd</span><br></pre></td></tr></table></figure></p>
+<p>要传整个目录就加个<code>-r</code>参数就好</p>
+<h1 id="参考链接"><a href="#参考链接" class="headerlink" title="参考链接"></a>参考链接</h1><p><a href="http://www.jianshu.com/p/a659924515f7" target="_blank" rel="noopener">http://www.jianshu.com/p/a659924515f7</a><br><a href="http://yunnigu.dropsec.xyz/2016/10/08/checksec%E5%8F%8A%E5%85%B6%E5%8C%85%E5%90%AB%E7%9A%84%E4%BF%9D%E6%8A%A4%E6%9C%BA%E5%88%B6/#checksec及其包含的保护机制" target="_blank" rel="noopener">http://yunnigu.dropsec.xyz/2016/10/08/checksec%E5%8F%8A%E5%85%B6%E5%8C%85%E5%90%AB%E7%9A%84%E4%BF%9D%E6%8A%A4%E6%9C%BA%E5%88%B6/#checksec及其包含的保护机制</a><br>linux程序的常用保护机制:<br><a href="https://introspelliam.github.io/2017/09/30/linux%E7%A8%8B%E5%BA%8F%E7%9A%84%E5%B8%B8%E7%94%A8%E4%BF%9D%E6%8A%A4%E6%9C%BA%E5%88%B6/" target="_blank" rel="noopener">https://introspelliam.github.io/2017/09/30/linux%E7%A8%8B%E5%BA%8F%E7%9A%84%E5%B8%B8%E7%94%A8%E4%BF%9D%E6%8A%A4%E6%9C%BA%E5%88%B6/</a><br>ssh配置：<a href="https://github.com/hehongwei44/my-blog/issues/4" target="_blank" rel="noopener">https://github.com/hehongwei44/my-blog/issues/4</a></p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">GETAGGT IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/linux/">linux</a> <a class="tag tag--primary tag--small t-link" href="/tags/pwn/">pwn</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/pwn入门/" data-tooltip="pwn入门" aria-label="FRÜHER: pwn入门">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/ARM异常向量表攻击/" data-tooltip="ARM异常向量表攻击" aria-label="NÄCHSTER: ARM异常向量表攻击">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/pwn题的搭建/" title="Teilen auf Facebook">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/pwn题的搭建/" title="Teilen auf Twitter">
+                    <i class="fa fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/pwn题的搭建/" title="Teilen auf Google Plus">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2018 Edvison. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="5">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/pwn入门/" data-tooltip="pwn入门" aria-label="FRÜHER: pwn入门">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/ARM异常向量表攻击/" data-tooltip="ARM异常向量表攻击" aria-label="NÄCHSTER: ARM异常向量表攻击">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/pwn题的搭建/" title="Teilen auf Facebook">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/pwn题的搭建/" title="Teilen auf Twitter">
+                    <i class="fa fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/pwn题的搭建/" title="Teilen auf Google Plus">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                <div id="share-options-bar" class="share-options-bar" data-behavior="5">
+    <i id="btn-close-shareoptions" class="fa fa-close"></i>
+    <ul class="share-options">
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/pwn题的搭建/">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Teilen auf Facebook</span>
+                </a>
+            </li>
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/pwn题的搭建/">
+                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Teilen auf Twitter</span>
+                </a>
+            </li>
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/pwn题的搭建/">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Teilen auf Google Plus</span>
+                </a>
+            </li>
+        
+    </ul>
+</div>
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-remove"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+        
+            <h4 id="about-card-name">Edvison</h4>
+        
+            <div id="about-card-bio"><p>Just the way you are</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>二进制、逆向</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover-v1.2.0.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/jquery.js"></script>
+<script src="/assets/js/jquery.fancybox.js"></script>
+<script src="/assets/js/thumbs.js"></script>
+<script src="/assets/js/tranquilpeak.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script src="/live2dw/lib/L2Dwidget.min.js?0c58a1486de42ac6cc1c59c7d98ae887"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","model":{"jsonPath":"/live2dw/assets/wanko.model.json"},"display":{"position":"right","width":100,"height":200},"mobile":{"show":true}});</script></body>
+</html>

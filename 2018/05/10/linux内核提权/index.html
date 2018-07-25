@@ -79,7 +79,7 @@
                 href="#about">
         
         
-            <img class="header-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
+            <img class="header-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
         
         </a>
     
@@ -97,7 +97,7 @@
         
             <div class="sidebar-profile">
                 <a href="/#about">
-                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
+                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
                 </a>
                 <h4 class="sidebar-profile-name">Edvison</h4>
                 
@@ -202,10 +202,10 @@
             
                 <li class="sidebar-button">
                     
-                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="Mail">
+                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="E-Mail">
                     
                         <i class="sidebar-button-icon fa fa-lg fa-envelope-o" aria-hidden="true"></i>
-                        <span class="sidebar-button-desc">Mail</span>
+                        <span class="sidebar-button-desc">E-Mail</span>
                     </a>
             </li>
             
@@ -250,7 +250,7 @@
         <div class="post-meta">
     <time datetime="2018-05-10T22:09:18+08:00">
 	
-		    May 10, 2018
+		    10 May 2018
     	
     </time>
     
@@ -271,7 +271,7 @@
             <!-- excerpt --></p>
 <h1 id="0x00-前言"><a href="#0x00-前言" class="headerlink" title="0x00 前言"></a>0x00 前言</h1><p>花了一个月的时间开始学习linux内核提权，把学到的东西都整理在这了~前面介绍了关于内核提权的一些基础知识，后面会分析一个具体的漏洞。</p>
 <p>本文首发于先知社区：<a href="https://xianzhi.aliyun.com/forum/topic/2054" target="_blank" rel="noopener">https://xianzhi.aliyun.com/forum/topic/2054</a></p>
-<h1 id="table-of-contents">Table of Contents</h1><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#0x00-前言"><span class="toc-text">0x00 前言</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#0x01-内核提权"><span class="toc-text">0x01 内核提权</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#分级保护域"><span class="toc-text">分级保护域</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#提权"><span class="toc-text">提权</span></a></li></ol></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#0x02-内核保护措施"><span class="toc-text">0x02 内核保护措施</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#SMEP"><span class="toc-text">SMEP</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#KASLR"><span class="toc-text">KASLR</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#内核地址显示限制"><span class="toc-text">内核地址显示限制</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x03-ret2usr攻击"><span class="toc-text">0x03 ret2usr攻击</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x04-内核ROP"><span class="toc-text">0x04 内核ROP</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#Stack-Pivot"><span class="toc-text">Stack Pivot</span></a></li></ol></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x05-CVE-2013-1763漏洞分析"><span class="toc-text">0x05 CVE-2013-1763漏洞分析</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#漏洞描述"><span class="toc-text">漏洞描述</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#影响范围"><span class="toc-text">影响范围</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#patch"><span class="toc-text">patch</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#漏洞函数"><span class="toc-text">漏洞函数</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#漏洞利用分析"><span class="toc-text">漏洞利用分析</span></a></li></ol></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x06-参考链接"><span class="toc-text">0x06 参考链接</span></a></li></ol></li></ol>
+<h1 id="table-of-contents">Inhaltsverzeichnis</h1><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#0x00-前言"><span class="toc-text">0x00 前言</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#0x01-内核提权"><span class="toc-text">0x01 内核提权</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#分级保护域"><span class="toc-text">分级保护域</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#提权"><span class="toc-text">提权</span></a></li></ol></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#0x02-内核保护措施"><span class="toc-text">0x02 内核保护措施</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#SMEP"><span class="toc-text">SMEP</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#KASLR"><span class="toc-text">KASLR</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#内核地址显示限制"><span class="toc-text">内核地址显示限制</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x03-ret2usr攻击"><span class="toc-text">0x03 ret2usr攻击</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x04-内核ROP"><span class="toc-text">0x04 内核ROP</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#Stack-Pivot"><span class="toc-text">Stack Pivot</span></a></li></ol></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x05-CVE-2013-1763漏洞分析"><span class="toc-text">0x05 CVE-2013-1763漏洞分析</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#漏洞描述"><span class="toc-text">漏洞描述</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#影响范围"><span class="toc-text">影响范围</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#patch"><span class="toc-text">patch</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#漏洞函数"><span class="toc-text">漏洞函数</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#漏洞利用分析"><span class="toc-text">漏洞利用分析</span></a></li></ol></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x06-参考链接"><span class="toc-text">0x06 参考链接</span></a></li></ol></li></ol>
 <h1 id="0x01-内核提权"><a href="#0x01-内核提权" class="headerlink" title="0x01 内核提权"></a>0x01 内核提权</h1><h3 id="分级保护域"><a href="#分级保护域" class="headerlink" title="分级保护域"></a>分级保护域</h3><p>在计算机中用于在发生故障时保护数据，提升计算机安全的一种方式，通常称为保护环，简称Rings。在一些硬件或者微代码级别上提供不同特权态模式的CPU架构上，保护环通常都是硬件强制的。Rings是从最高特权级（通常被叫作0级）到最低特权级（通常对应最大的数字）排列的。linux使用了ring0和ring3，ring0用于内核代码和驱动程序，ring3用于用户程序运行。</p>
 <h3 id="提权"><a href="#提权" class="headerlink" title="提权"></a>提权</h3><p>在内核中想要获得root权限不能只是用<code>system(&quot;/bin/sh&quot;);</code>而是用下面的语句：</p>
 <pre><code>commit_creds(prepare_kernel_cred (0));
@@ -382,7 +382,7 @@ sudo update-grub
     <div id="post-footer" class="post-footer main-content-wrap">
         
             <div class="post-footer-tags">
-                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                <span class="text-color-light text-small">GETAGGT IN</span><br/>
                 
     <a class="tag tag--primary tag--small t-link" href="/tags/kernel/">kernel</a> <a class="tag tag--primary tag--small t-link" href="/tags/linux/">linux</a>
 
@@ -395,18 +395,18 @@ sudo update-grub
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/11/内核驱动程序mmap处理程序利用/" data-tooltip="mmap处理程序利用" aria-label="PREVIOUS: mmap处理程序利用">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/11/内核驱动程序mmap处理程序利用/" data-tooltip="mmap处理程序利用" aria-label="FRÜHER: mmap处理程序利用">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
-                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
                 </a>
             </li>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/02/14/shellcode编写/" data-tooltip="shellcode编写" aria-label="NEXT: shellcode编写">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/02/14/shellcode编写/" data-tooltip="shellcode编写" aria-label="NÄCHSTER: shellcode编写">
                 
-                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
                 </a>
             </li>
@@ -414,7 +414,7 @@ sudo update-grub
     </nav>
     <ul class="post-actions post-action-share">
         <li class="post-action hide-lg hide-md hide-sm">
-            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
                 <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
         </li>
@@ -422,7 +422,7 @@ sudo update-grub
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/10/linux内核提权/" title="Share on Facebook">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/10/linux内核提权/" title="Teilen auf Facebook">
                     <i class="fa fa-facebook-official" aria-hidden="true"></i>
                 </a>
             </li>
@@ -430,7 +430,7 @@ sudo update-grub
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/10/linux内核提权/" title="Share on Twitter">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/10/linux内核提权/" title="Teilen auf Twitter">
                     <i class="fa fa-twitter" aria-hidden="true"></i>
                 </a>
             </li>
@@ -438,7 +438,7 @@ sudo update-grub
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/10/linux内核提权/" title="Share on Google+">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/10/linux内核提权/" title="Teilen auf Google Plus">
                     <i class="fa fa-google-plus" aria-hidden="true"></i>
                 </a>
             </li>
@@ -448,7 +448,7 @@ sudo update-grub
         
         <li class="post-action">
             
-                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
             
                 <i class="fa fa-list" aria-hidden="true"></i>
             </a>
@@ -481,18 +481,18 @@ sudo update-grub
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/11/内核驱动程序mmap处理程序利用/" data-tooltip="mmap处理程序利用" aria-label="PREVIOUS: mmap处理程序利用">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/11/内核驱动程序mmap处理程序利用/" data-tooltip="mmap处理程序利用" aria-label="FRÜHER: mmap处理程序利用">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
-                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
                 </a>
             </li>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/02/14/shellcode编写/" data-tooltip="shellcode编写" aria-label="NEXT: shellcode编写">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/02/14/shellcode编写/" data-tooltip="shellcode编写" aria-label="NÄCHSTER: shellcode编写">
                 
-                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
                 </a>
             </li>
@@ -500,7 +500,7 @@ sudo update-grub
     </nav>
     <ul class="post-actions post-action-share">
         <li class="post-action hide-lg hide-md hide-sm">
-            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
                 <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
         </li>
@@ -508,7 +508,7 @@ sudo update-grub
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/10/linux内核提权/" title="Share on Facebook">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/10/linux内核提权/" title="Teilen auf Facebook">
                     <i class="fa fa-facebook-official" aria-hidden="true"></i>
                 </a>
             </li>
@@ -516,7 +516,7 @@ sudo update-grub
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/10/linux内核提权/" title="Share on Twitter">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/10/linux内核提权/" title="Teilen auf Twitter">
                     <i class="fa fa-twitter" aria-hidden="true"></i>
                 </a>
             </li>
@@ -524,7 +524,7 @@ sudo update-grub
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/10/linux内核提权/" title="Share on Google+">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/10/linux内核提权/" title="Teilen auf Google Plus">
                     <i class="fa fa-google-plus" aria-hidden="true"></i>
                 </a>
             </li>
@@ -534,7 +534,7 @@ sudo update-grub
         
         <li class="post-action">
             
-                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
             
                 <i class="fa fa-list" aria-hidden="true"></i>
             </a>
@@ -552,7 +552,7 @@ sudo update-grub
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/10/linux内核提权/">
-                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Share on Facebook</span>
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Teilen auf Facebook</span>
                 </a>
             </li>
         
@@ -560,7 +560,7 @@ sudo update-grub
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/10/linux内核提权/">
-                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
+                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Teilen auf Twitter</span>
                 </a>
             </li>
         
@@ -568,7 +568,7 @@ sudo update-grub
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/10/linux内核提权/">
-                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
+                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Teilen auf Google Plus</span>
                 </a>
             </li>
         
@@ -590,7 +590,7 @@ sudo update-grub
             <i class="fa fa-remove"></i>
         </div>
         
-            <img id="about-card-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
+            <img id="about-card-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
         
             <h4 id="about-card-name">Edvison</h4>
         

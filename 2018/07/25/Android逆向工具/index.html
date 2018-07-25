@@ -1,0 +1,741 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hans">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Edvison&#39;s blog">
+    <title>Android逆向工具：非通常方法 - Edvison&#39;s blog</title>
+    <meta name="author" content="Edvison">
+    
+    
+        <link rel="icon" href="http://edvison.cn/assets/images/favicon.ico">
+    
+    
+        <link rel="alternate" type="application/atom+xml" title="RSS" href="/atom.xml">
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Edvison","sameAs":["https://github.com/edvison","mailto:edvisonmail@163.com"],"image":"1.png"},"articleBody":"本文是Android reverse engineering tools: not the usual suspects的翻译文章。\n\n摘要在Android安全领域，所有逆向工程师可能都会使用一些著名的分析工具，如apktool，smali，baksmali，dex2jar等。这些工具确实是Android应用程序分析的必备工具。 但是，还有其他有趣的工具和问题，很少在会议中涉及，这些都是本文的内容。\n本文讨论下面五个点：（1）如何为Android应用程序分析共享逆向工程环境，（2）如何编写JEB2脚本，（3）Android调试器的状态，（4）如何读取TLS加密通信， （5）如何在Dalvik上使用Radare2。\n1.简介Android逆向是现在在互联网上广泛涉及的主题，这里有一些关于Android逆向的视频，文章教程[1, 2, 3, 4]，所有这些都提供了大致相同的步骤（什么是APK，什么是Android清单，如何解压缩，阅读smali，反编译，重新组装APK）并使用相同的工具（apktool，smali / baksmali，AXMLPrinter，Java Decompiler，Androguard）。 事实上，这种方法是完美的，工具非常方便，我鼓励阅读这些链接。\n那些在该领域工作的人（例如反病毒分析员）也面临许多其他高级问题，其中之一是需要对高级样本进行解包或去混淆。 研究人员已经多次讨论过这种情况[5, 6, 7, 8]。但是，其他几个问题仍然没有答案。 在本文中，我们将解决以下问题：\n\n如何与他人共享Android程序的逆向环境。\n如何编写Android逆向工具脚本以简化样本分析。\n是否可以调试可疑应用程序，设置断点并逐步运行它以了解发生的情况。\n随着Android程序开发人员现在越来越多地使用HTTPS，我们将考虑如何检查SSL / TLS加密的应用程序流。\n我们是否可以超越常规，使用除了通常的apktool，baksmali之外的反汇编程序。本文从移动反病毒分析师的角度处理这些独立问题。 但是，这些技术适用于任何Android程序的逆向。 每个问题都在自己的章节中讨论。\n\n2. 适用于Android逆向的Docker镜像2.1 为什么使用Docker镜像？反病毒分析师必须在干净的环境中检查每个可疑样本。 有时，您还需要与同事共享样本，以获得他/她对特定点的建议。唉，建立一个逆向工程环境非常耗时。严格来说，这并不困难，但有许多不同的工具可以安装（apktool，baksmali，Java Decompiler，AXMLPrinter，Android模拟器…），每个都有不同的设置步骤，没有自动化程序。\n因此，Android程序的便携式逆向环境是最有用的。 为了创建这样的环境，一些计划已经提出了具有所有必要工具的虚拟机。例如，有Android逆向工程（ARE）VM [9]或Androl4b VM [10]。 VM的缺点是您必须下载千兆字节的信息（整个Linux主机以及Android工具），并且您获得的环境通常已经过时，因为VM尚未维护。\n为了解决这些问题，我提出了使用Android逆向的Docker镜像。 Docker [11]是一个开源项目，可以自动在软件容器内部署应用程序[12)]。 与完整VM相比，下载大小减少，因为：\n\nDocker容器依赖于主机的底层操作系统，不需要包含完整的操作系统[13]。\nDocker镜像由多个层组成，就像下载块一样。 这些图层可以在镜像中重复使用，因此如果给定镜像使用图层A和B，而另一镜像使用B和C，则不需要重新下载B.\n\n我的Docker镜像已经上传到Docker Hub了，可以使用Docker命令docker pull直接下载。 确切地说，使用我的环境的步骤是：\n\n安装Docker（如果你还没有这样做的话）。\n检索Android RE Docker镜像：docker pull cryptax/android-re\n启动一个（或多个）容器：docker run -d options cryptax/android-re您可以立即获得一个独立的Linux主机，您可以通过该主机SSH或使用VNC（桌面共享）并访问Android逆向工具和模拟器。Docker镜像的使用也改善了维护问题。 实际上，Docker镜像是从Dockerfile构建的，就像创建镜像的“源脚本”一样。 例如，Dockerfile指定要安装的每个包以及设置容器所需的命令。 这个Dockerfile在[14]共享，你可以根据自己的需要自由定制，或者将它更新到这个或那个更新的版本。\n\n2.2 镜像创建技巧在本小节中，我分享了一些技巧，用于为Docker镜像设置Dockerfile。\n2.2.1 Docker 和 GUIDocker特别适合创建包含守护进程，服务，Web服务器等的隔离专区。令人惊讶的是，对图形应用程序的支持并不容易，并且有许多问题和博客文章[15]。 基本上，Docker容器被视为远程Unix主机，有三种选择（可见下表）：\n\n与容器共享您的显示器。 运行xhost +。 然后启动容器，并在选项中确保共享DISPLAY环境变量和X11套接字：\n12docker run -d -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unixOTHER-OPTIONS --name mycontainer cryptax/android-re\n\n在SSH中使用X转发。 这再次依赖于X11。 通过SSH连接到容器时，请指定选项-X以启用X11转发。\n\n使用VNC。 在这种情况下，图形应用程序的显示由容器处理。 容器包含VNC服务器（图形桌面共享系统）。 使用容器时，将VNC客户端连接到容器的VNC服务器并共享其桌面。Android模拟器需要GLX支持。 因此，容器必须配置支持GLX的X11显示服务器。 例如：12Xvfb :1 +extension GLX +render -noreset -screen 0 1280x1024x24&amp;DISPLAY=:1 /usr/bin/xfce4-session &gt;&gt; /root/xsession.log 2&gt;&amp;1 &amp;\n\n\n\n\n\n解决方法\n优点\n缺点\n\n\n\n\n分享显示\n轻量级\n仅适用于支持X11的主机（有时会有错误）\n\n\nSSH X转发\n轻量级\n不适用与Windows,Mac上有bug\n\n\nVNC查看器\n需要安装vncviewer\n由容器设置的屏幕分辨率。容器窗口出现在VNC查看器窗口内。 容器需要包含窗口管理器和X11服务器。\n\n\n\n2.2.2 两个命令因此，如果我们想要更灵活地使用，我们的Docker镜像将需要（1）SSH服务器和（2）容器中的VNC服务器。 通常，服务器通过CMD在Dockerfile中启动。 例如：CMD [&quot;/usr/sbin/sshd&quot;, &quot;-D&quot;]如果我们为VNC指定另一个CMD，我们会感到惊讶：Dockerfiles不支持多个CMD。 最后一个CMD取代之前的所有CMD。 推荐的解决方案是使用 supervisor[16]，一个过程控制系统。在我们的例子中，我们配置supervisor启动SSH和VNC，并运行supervisord。 在下图中，第4行和第5行配置SSH服务器。 第6行和第7行启动个人脚本startXvfb.sh，它启动Xvfb和VNC服务器。\n2.2.3 密码登录VNC服务器的密码在Dockerfile中进行了硬编码：12ENV VNC_PASSWORD &quot;rootpass&quot;RUN x11vnc -storepasswd $VNC_PASSWORD ˜/.vnc/passwd\nSSH密码也是硬编码的。 由于我们需要一个简单的环境，因此只有一个用户root。 所以root需要能够SSH。 默认情况下这是不可能的; 需要修改SSH服务器配置以授权root登录：123RUN echo &quot;root:$SSH_PASSWORD&quot; | chpasswdRUN sed -i &apos;s/PermitRootLogin prohibit-password/PermitRootLogin yes/&apos; /etc/ssh/sshd_configRUN sed &apos;s@session\\s*required\\s*pam_loginuid.so@session optional pam_loginuid.so@g&apos; -i /etc/pam.d/sshd\n请注意，您可能希望针对自己的环境进行更改。 使用硬编码密码也意味着Docker容器不应在Web上公开提供。\n2.2.4 Android模拟器Dockerfile中的一个重要步骤是安装Android模拟器。 通常，Android模拟器使用名为android的图形工具安装。 实际上，android也可以在命令行中运行，因此可以在Dockerfile中使用。 步骤是：\n\n下载Android SDK，解压缩并设置路径。\n1234RUN wget -q -O &quot;/opt/tools-linux.zip&quot; https://dl.google.com/android/repository/...RUN unzip /opt/tools-linux.zip ......ENV PATH $PATH:/opt:...\n\n然后，您可以使用android更新SDK工具，平台工具和构建工具，获取Android版本并获取给定体系结构（例如ARM）的系统映像：\n12RUN echo y | android update sdk --filter tools --no-ui --force -aRUN echo y | android update sdk --filter platform-tools --no-ui --force -a\n\n\n由于命令行android要求用户确认，因此需要echo y以在用户输入的后台运行命令。\n\n创建Android虚拟设备（AVD）1RUN echo n | android create avd --force --name AVDNAME --target ANDROID-VERSION --abi &quot;default/armeabi-v7a&quot;\n\n\n最后一步是导出Android模拟器使用的端口。 默认情况下使用的第一个控制台端口是5554. Docker容器必须打开该端口，以便您可以远程登录到Android模拟器控制台。\n2.2.5 磁盘空间最后，要考虑磁盘空间。 如果我们在Dockerfile中配置了许多软件包，那么容器将是巨大的，与使用VM相比，我们将获得很少的收益。 Dockerfile只需要与使用的东西一起设置（你可以自定义我的，删除你不需要的东西）。 此外，清理包缓存也很好。 网上有几个最佳实践，解释了如何优化一个Dockerfile [17]。\n3. JEB2脚本JEB是一个图形化的Android程序反编译器，由PNF Software商业化，并且经常被该领域的人们使用。 与IDA Pro类似，逆向工程任务可以通过Python代码自2.0.14版（JEB2）编写脚本。更有趣的是自动执行必须针对给定分析执行的可重复的繁琐任务。 PNF软件提供文档[18]和博客文章[19]来帮助编写您的第一个脚本，但这些示例都过于简单（打印hello world）并不能帮助逆向工程师完成实际任务。本节将介绍如何实现字符串反混淆器 - 反转恶意样本时的常见要求 - 作为JEB2脚本，以Android / Ztorg示例为例（sha256：2c546ad7f102f2f345f30f556b8d8162bd365a7f1a52967fce906d46a2b0dac4）。\n3.1 为脚本设置JEB2第一个预备步骤是安装。 在文档中并不总是那么清楚，幸运的是这很简单：首先安装Jython（Python for Java平台），然后将脚本放在./JEB-HOME/scripts目录中。 此外，请确保为API参考[20]添加书签，因为这是脚本开发的必备条件。\n3.2 去混淆脚本目标我们注意到Ztorg示例使用字符串混淆。 混淆的字符串作为字节数组加载（没有明显的意义）并由例程解码 - 特别是在这种情况下，通过包a.b中的类c的方法a()（样本也模糊了名称，如您所见） - 解码例程已在[21]中反转。\n我们希望找到初始化这些混淆字符串的所有类，并自动对它们进行去混淆。 结果如图所示。\n3.3 脚本开发我们提到官方文档太基础了，但是PNF软件在GitHub上提供了几个示例脚本[22]。 最接近我们需求的是JEB2JavaASTDecryptStrings.py，它是我们脚本的基础。我的脚本可在[23]获得。基本上，我们保留示例的开头：导入，后端引擎的初始化，打开第一个项目并枚举反编译的类。 原始脚本（类重命名，删除了一些不必要的行）的变化很少，直到那一点（JEB2JavaASTDecryptStrings.py的第45行 - 对应于我自己脚本的第35行）。1self.units = RuntimeProjectUtil.findUnitsByType(prj, IJavaSourceUnit, False)\n在Ztorg示例中，我们注意到反编译的字符串总是位于静态类构造函数中：1234567static &#123;b.a = c.a(new byte[]&#123;15, 116, 8&#125;);b.b = c.a(new byte[]&#123;110, 114, 105, 111&#125;);b.c = c.a(new byte[]&#123;105, 4, 25, 8, 21,,! 107, 8&#125;);b.d = c.a(new byte[]&#123;85, 29, 66&#125;);&#125;\n所以，第一步是找到静态构造函数：\n\n1.获取代表该类的JEB2对象：1javaClass = unit.getClassElement()\n\n\n在API中，这将返回IJavaClass类型的对象（请参阅API中的IJavaSourceUnit中的getClassElement）。\n\n解析类的所有方法（getMethods（））。\n检查类的名称是否对应于静态构造函数。 之后我们可以休息。1if m.getName() == &apos;&lt;clinit&gt;&apos;\n\n\n然后，我们需要在静态构造函数中找到涉及对去混淆例程的调用的所有行。 在JEB2中，行更精确。 我们解析方法的语句：1for statement in m.getBody():\n有几种类型的语句：函数调用，赋值，条件，返回等。在我们的示例中，模糊字符串出现在赋值中。 所以，我们过滤赋值语句：1if statement.getElementType() == JavaElementType.Assignment:\n这是一个有点棘手的地方，混淆字符串出现在：\n\n简单的任务。1v = c.a(....)\n\n\n我们使用诸如statement.getRight（）之类的调用检索的赋值的右侧就是对去混淆例程的调用。 这就是我们需要修改的内容1v = &apos;&apos;de-obfuscated&apos;&apos;\n\n更复杂的任务1v = new String(c.a(....))\n\n\n赋值的右侧不是调用而是new，它包含对去混淆例程的调用。 我们希望将其转换为：1v = new String(&apos;&apos;de-obfuscated&apos;&apos;)\n因此，要检查语句是否调用去混淆例程，我们必须：\n\n检查语句的getRight（）是否是对我们例程的调用（例1）。 我们通过检查它的签名La / b / c来匹配例程; - &gt; a（[B]Ljava/lang/String; （记住，解码例程是a.b.c.a（））：1getMethod().getSignature()\n\n\n否则，检查右侧部分是否包含对我们的例程调用的子元素（案例2）。 我们解析元素:1for rightsub in statement.getRight().getSubElements():\n当我们找到这样的声明时，就需要去混淆。 这就是称之为去混淆方法的点。最后，我们可以在控制台中打印结果，但更好的是，我们希望去混淆的字符串用c.a（…）替换该部分。 下面代码的第1行调用replaceSubElement（）完成这个操作，其中：\n\nelem是包含c.a（…）的右侧部分，例如statement.getRight（）。\nfather是包含该元素的元素。 例如，上层的右侧部分或语句。使用self.cstbuilder.createString（）（第1行）创建新的去混淆字符串，并通过通知它来更新JEB2窗口（unit.notifyListeners（） - 第2行）。12father.replaceSubElement(elem, self.cstbuilder.createString(&apos;&apos;.join(map(chr,decbytes))))unit.notifyListeners(JebEvent(J.UnitChange))\n\n\n4. 调试Android样本调试是许多逆向工程师的梦想。 特别是在复杂的样本上，将断点放在关键线上，逐步运行代码，检查（甚至修改）变量和堆栈非常方便。 据我所知，有两种工具可以在Dalvik级别完成：JEB2（我们在第3节中提到）和CodeInspect [24]。\n我尝试了JEB2 2.2.11版本（撰写本文时的最新版本）和CodeInspect（2016年10月的许可演示版）。 结果对未来有希望，但尚未成熟。\n4.1 CodeInspect我在CodeInspect面临的主要问题是它的重量级。 我花了将近三分钟来打开一个调试器。 不过，如果你足够耐心，它运行良好，我成功调试了实例Riskware/InnerSnail!Android (sha256: c5c11408483eb87781af30280b2878890f5741fe63d569ae9e3689c1e550eaa4）\n该示例使用DexClassLoader类加载Dalvik可执行文件。 该文件作为类构造函数中的参数传递，但是使用静态分析我无法找到它的值。 所以我在CodeInspect中打开了这个项目。 Dalvik字节码被转换为Jimple，这是Java的中间表示。 它与smali不同，但易于遵循。 我在相应的行上设置断点，打开调试器并将其附加到现有的模拟器（或者，CodeInspect可以启动另一个）。 它将示例安装在模拟器上，运行到断点并读取变量的值（隐藏的zip文件名）。\n4.2 JEB2使用JEB2，步骤基本相同，除了JEB2 GUI不安装和运行应用程序 - 您需要这样做。 要启动应用程序：1am start -D -S -n PACKAGENAME/ACTIVITYNAME\n其中包名称类似于com.mx.cool.videoplayer，活动名称是包名称的相对路径，例如， .activity.MainActivity（不要忘记初始点）。\n我尝试了两个不同的样本：Android/Crosate.A!tr (sha256: 15281dbe2603f5973d53c5fddabbcc3de6ad3ec65146aa2ffb34a779ea604f82)和第3节的Ztorg。不幸的是，我遇到了许多错误和崩溃（我向开发人员报告）当前版本的JEB2，很难完成工作。\n4.3 结论希望在未来几个月内，CodeInspect和JEB2的情况都会有所改善。 请注意，运行调试器会话显然会运行示例，因此，在发生严重恶意活动后，不要将断点设置得太远。 此外，如果您修改代码，它会重新编译一个新的应用程序，这可能会在恶意软件分析的情况下引发道德问题，因为它实际上会创建一个新的恶意样本。\n5. HTTPS 流量检查好消息：越来越多的Android应用程序使用TLS与远程服务器通信。 然而，对于逆向工程师，尤其是反病毒分析师，这提出了另一个问题，因为通信流现在是加密的，因此是不可读的。 我们怎样才能解密流量？\n解决方案是Man-in-the-Middle（MitM），我们拥有的主机配置为模拟客户端的服务器，相反，模拟服务器的客户端。 当客户端与服务器通信时，MitM主机拦截请求并提供自己的证书，声称它是服务器。 客户端被欺骗，因此加密MitM主机的消息，而不是服务器的消息。 服务器对客户端的响应以相同的方式处理，MitM主机此次声称它是客户端。\nMitmproxy能够自动执行此操作。 此工具在MitM主机上运行。 它为每次与TLS服务器的通信动态自动生成证书，并解密并显示流经它的数据包（甚至可以进行数据包修改）。\n下图解释了我们逆向工程实验的架构。 Android智能手机和MitM主机位于同一个（Wi-Fi）网络上。\n为了拦截网络数据包，我们修改手机的Wi-Fi连接配置以使用代理：指定MitM主机的IP地址，默认端口8080（还有其他可能性，但这是最简单的 - 见[25]）。 因此，手机的所有数据包都将转至MitM主机。为了模拟真实服务器，MitM主机生成（假）服务器证书，由其自己的CA签名。 由于手机不知道此CA，因此必须将其添加到手机的SD卡中：1push /.mitmproxy/mitmproxy-ca-cert.cer\n然后在手机上安装证书：设置 - &gt;安全 - &gt;从SD卡安装，然后选择证书。\n设置完成。 启动mitmproxy以开始窃听手机和远程TLS服务器之间的通信。\n例如，我在真正的Android应用程序上执行了这样的MitM来控制智能牙刷（图5）。 与远程服务器https://app.beam.dental 的通信是通过HTTPS进行的，并且在标准网络捕获中显示为加密。 通过mitmproxy，我们能够解密任何数据包并检查其内容。\n请注意，存在一个限制：MitM不适用于使用证书锁定的Android应用。 但是，到目前为止，这种应用还很少见。\n6. Radare2Radare2是一个“逆向工程和分析二进制文件的框架”[26]。 它是开源的，并且在极客社区中因其命令行交互式shell而广为人知，并且广泛支持许多架构，包括较少使用的架构。\n本节提供有关使用Radare2分析Android恶意软件的提示和技巧，以及反馈。\n6.1 Dalvik支持虽然Radare2不是逆向Android程序的直接选择（该领域的人通常更喜欢apktool，baksmali，JD，JEB等组合），但它最近增加了对Dalvik可执行文件的支持（实际上，对Dalvik的支持至少可以追溯到2015年，但在我看来，它只能自2016年底以来才被使用用），对于业余的逆向工程师或Radare2粉丝来说可能是一个有趣的选择。Radare2对APK，Android清单或资源没有任何特别的了解。 它实际上只能在Dalvik可执行文件（.dex）上运行。 它产生Dalvik字节码。 没有反编译器。\n反汇编程序相当不错，偶尔会有错误。 例如，在4月份，我报告了数组数据有效载荷的反汇编中的一个错误[27]。 这几天后就解决了。\n6.2 逆向DEX的命令有几个关于如何使用Radare2的教程（例如参见[28, 29, 30, 31]）。 在本小节中，我们只关注处理Dalvik可执行文件的特殊性。\n首先，我们在DEX上启动Radare2：1r2 -e asm.payloads=true classes.dex\n然后，我们需要用命令aa分析所有标志。 不幸的是，这个步骤目前在一些样品上很长（在某些情况下长达10分钟！）。\n以下命令对DEX最有用：\n\n搜索对DEX特别有用，因为可执行文件格式包含字符串池，但也包含类和方法的文本名称。 因此，grep对于给定的常量（iz~string），导入（ii~string），类名（ic~string），函数名（afl~string）和字节码（pd LINES @ FUNC~string）非常有用。 注意~和要搜索的字符串之间没有空格。 搜索区分大小写。 有些字符表现不佳，例如 斜线显示为下划线。\n10x00064fef 49 str.http:__verisign_controlcenter.com_teapot_gate.php\n\n方法分析。 您可以使用seek命令的ADDR或sf FUNC-SYMBOL-NAME跳转到给定方法，或直接在给定地址处反汇编几行：pd LINES @ ADDR。 查找交叉引用也是必须的：axt NAME用于交叉引用给定名称，axf NAME用于交叉引用来自给定名称。\n1234567[0x0001f424]&gt; s 0x00036b30or[0x0001f424]&gt; sf sym.Lcom_adobe_flashplayer__UC.method._init___V[0x00036b30]&gt; pd 10...[0x00036b30]&gt; axf sym.Lcom_adobe_flashplayer__UC.method._init___VC 0x36b30 invoke-direct &#123;v0&#125;, Ljava/lang/Object.&lt;init&gt;()V ; 0xede\n\n注释/编辑。 要添加注释，命令是CC这是我的注释@ADDR。 要删除它，CC-。 要重命名一个函数：afn new-name。 目前尚无法重命名局部变量。 afvn v20新名称最终将在一天内推出。\n\n\n6.3 脚本由于其命令行性质，Radare2特别适合脚本编写。 例如，从Radare2提示符，可以使用以下特殊构造调用Python r2脚本：1#!pipe python ...\n脚本本身必须导入r2pipe库[32]：1import r2pipe\n并且您可以自动执行两个命令：12r2p=r2pipe.open()r2p.cmd(your r2 command)\n我编写了一个Radare2脚本来解混代Android / Ztorg示例的字符串。 该脚本可在[33]获得。 它有两个参数：混淆字符串的地址及其长度。 它将：\n\n读取模糊字符串的地址（作为第一个参数提供）\n跳转到该地址（命令s ADDR）\n将x后面的字节（第二个参数）作为unicode字符串读取（命令p8 BYTES）\n在这些字节上调用去混淆例程并显示结果。据我所知，这是Android恶意软件上Radare2的最先进用法。\n\n6.4 讨论本小节介绍了我对Radare2的个人印象。\n我在简单和复杂的样本上都使用了Radare2：它可以工作。\n不过，在我看来，有一些限制。 我已经提到了运行aa和重命名局部变量所花费的时间，另外：\n\nRadare2不涉及面向对象的结构。 这意味着它不知道在DEX中实现了哪些类，或者哪些方法。 这使得难以解析样本。 这就是为什么你阅读反汇编代码，直到你发现有趣的东西与r2不兼容。 相反，您将搜索特定的内容（URL，密码，对给定函数的调用）并深入研究。\n入口点检测（命令ie）对Dalvik不起作用。 问题是Radare2不知道清单，所以它怎么能真正找到主要的活动呢？ 它确实发现了入口点，但只有低级别的入口点，如对android.support.v4.app.Fragment的onCreate（）的调用。\n\n此外，在使用Radare2时，我建议使用大屏幕：每行代码一般都很长。甚至有种视觉模式，每个文本博客都以图形方式显示，但我并不热衷于此。 （我不明白为什么当JD，JEB2和IDA Pro可供喜欢GUI的人使用时，为什么人们会使用Radare2进行GUI - 但这是个人观点。）\n总而言之，我会说我喜欢Radare2，因为它基于命令行，接近代码，可编写脚本。 但我发现很难对样本进行概述并解析它。 对于任何Radare2粉，我肯定会建议使用Radare2 for Android示例。 它运作良好。 但是，如果您是新手，门槛可能太高了。 如果您正在为Android寻找壳，我宁愿推荐Androguard。 如果您喜欢GUI，Radare2肯定不是选项，您应该坚持使用JD或JEB。\n7. 结论/要点以下是本文的内容：\n\n要共享您的Android逆向工程框架，请考虑使用Docker镜像。 我的镜像可以通过docker pull cryptax/android-re获得，并且可以从[14]下载适应它的源。\n要为您的Android示例编写字符串反混淆器，您可以从我的Ztorg去混淆器开始您自己的代码，可在[23]处获得。\nAndroid程序调试尚未运行。 CodeInspect和JEB2都很有希望，并且有望在未来几个月内实现，但在撰写本文时它们并不能很好地运作。\nMitmproxy可用于窃听Android程序的加密通信。 设置需要在手机上添加新的CA证书并指定要使用的代理。\nRadare2可用于反转Dalvik可执行文件。 它还可以用于高级分析，例如字符串混淆（代码见[33]）。 但是，学习如何使用Radare2在开始时有点困难，所以除非有一个非常具体的理由使用Radare2，否则新手可能会更好地坚持使用通常的apktool / baksmali / Java Decompiler（JD）。\n\n参考[1] Oliva Fora, P. Beginners Guide to Reverse Engineering Android Apps. In RSA Conference, February 2014. https://www.rsaconference.com/writable/presentations/file_upload/stu-w02b-beginners-guide-to-reverseengineering-android-apps.pdf.\n[2] Altomare, D. Android Reverse Engineering 101. Parts 1 to 5. November 2015. http://www.fasteque.com/androidreverse-engineering-101-part-1/.\n[3] Desnos, A.; Gueguen, G. Android: From Reversing to Decompilation. In BlackHat Abu Dhabi, 2011. https://media.blackhat.com/bh-ad-11/Desnos/bh-ad-11-DesnosGueguen-Andriod-Reversing_to_Decompilation_WP.pdf.\n[4] Margaritelli, S. Android Applications Reversing 101. April 2017. https://www.evilsocket.net/2017/04/27/Android-Applications-Reversing-101/.\n[5] Strazzere, T.; Sawyer, J. Android hacker protection level 0. In DEFCON 22, August 2014.\n[6] Apvrille, A.; Nigam, R. Obfuscation in Android malware and how to fight back. In 8th International CARO Workshop, May 2014.\n[7] Lipovsky, R. Obfuzzcation issues. In 8th International CARO Workshop, May 2014.\n[8] Yu, R. Android packers: facing the challenges, building solutions. In Virus Bulletin International Conference, 2014. https://www.virusbulletin.com/virusbulletin/2016/01/paper-android-packers-facing-challenges-building-solutions/.\n[9] http://redmine.honeynet.org/projects/are/wiki.\n[10] https://github.com/sh4hin/Androl4b.\n[11] https://www.docker.com/.\n[12] Wikipedia. https://en.wikipedia.org/wiki/Docker_(software).\n[13] Coleman, M. Containers are not VMs. March 2016. https://blog.docker.com/2016/03/containers-are-not-vms/.\n[14] Dockerfile. https://github.com/cryptax/androidre.\n[15] Rehm, F. Running GUI apps with Docker. September 2014. http://fabiorehm.com/blog/2014/09/11/running-gui-apps-withdocker/.\n[16] Krijger, Q. Using supervisor with Docker to manage processes (supporting image inheritance). March 2014. http://blog.trifork.com/2014/03/11/using-supervisor-with-docker-tomanage-processes-supporting-imageinheritance/.\n[17] Best practices for writing Dockerfiles. https://docs.docker.com/engine/userguide/eng-image/dockerfile_bestpractices/.\n[18] PNF Software. Writing client scripts. https://www.pnfsoftware.com/jeb2/manual/dev/writing-client-scripts/.\n[19] Falliere, N. Writing JEB2 scripts in Python. November 2015. https://www.pnfsoftware.com/blog/writingjeb2-scripts-in-python/.\n[20] PNF Software. JEB API documentation. https://www.pnfsoftware.com/jeb2/apidoc/reference/packages.html.\n[21] Apvrille, A. Teardown of a recent variant of Android/Ztorg – Part 1 and 2. March 2017. http://blog.fortinet.com/2017/03/15/teardown-of-a-recentvariant-of-android-ztorg-part-1 and http://blog.fortinet.com/2017/03/15/teardown-of-android-ztorg-part-2.\n[22] https://github.com/pnfsoftware/jeb2-samplecode/tree/master/scripts.\n[23] https://github.com/cryptax/misccode/blob/master/DeobfuscateZtorg.py.\n[24] https://codeinspect.sit.fraunhofer.de/.\n[25] http://docs.mitmproxy.org/en/stable/howmitmproxy.html.\n[26] Wikipedia. https://en.wikipedia.org/wiki/Radare2.\n[27] https://github.com/radare/radare2/issues/7376.\n[28] Techorganic. Radare2 in 0x1e minutes. March 2016. https://blog.techorganic.com/2016/03/08/radare-2-in-0x1e-minutes/.\n[29] A journey into Radare2 part 1. March 2017 https://www.megabeets.net/a-journeyinto-radare-2-part-1/.\n[30] http://radare.tv.\n[31] http://www.radare.org/r/talks.html.\n[32] Pancake. Scripting r2 with pipes, May 2015. https://medium.com/@trufae/scripting-r2-with-pipes-47a7e14c50aa.\n[33] https://github.com/cryptax/misccode/blob/master/r2ztorg.py.\n","dateCreated":"2018-07-25T17:40:35+08:00","dateModified":"2018-07-25T17:42:55+08:00","datePublished":"2018-07-25T17:40:35+08:00","description":"本文是Android reverse engineering tools: not the usual suspects的翻译文章。","headline":"Android逆向工具：非通常方法","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://edvison.cn/2018/07/25/Android逆向工具/"},"publisher":{"@type":"Organization","name":"Edvison","sameAs":["https://github.com/edvison","mailto:edvisonmail@163.com"],"image":"1.png","logo":{"@type":"ImageObject","url":"1.png"}},"url":"http://edvison.cn/2018/07/25/Android逆向工具/","keywords":"Android, Reverse"}</script>
+    <meta name="description" content="本文是Android reverse engineering tools: not the usual suspects的翻译文章。">
+<meta name="keywords" content="Android,Reverse">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Android逆向工具：非通常方法">
+<meta property="og:url" content="http://edvison.cn/2018/07/25/Android逆向工具/index.html">
+<meta property="og:site_name" content="Edvison&#39;s blog">
+<meta property="og:description" content="本文是Android reverse engineering tools: not the usual suspects的翻译文章。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180725102009-40b79f56-8fb1-1.png">
+<meta property="og:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180725102009-40d38464-8fb1-1.png">
+<meta property="og:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180725102009-40e76420-8fb1-1.png">
+<meta property="og:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180725102009-41253a34-8fb1-1.png">
+<meta property="og:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180725102010-41412ac8-8fb1-1.png">
+<meta property="og:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180725102010-41689e96-8fb1-1.png">
+<meta property="og:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180725102010-41a32b2e-8fb1-1.png">
+<meta property="og:updated_time" content="2018-07-25T09:42:55.158Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Android逆向工具：非通常方法">
+<meta name="twitter:description" content="本文是Android reverse engineering tools: not the usual suspects的翻译文章。">
+<meta name="twitter:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180725102009-40b79f56-8fb1-1.png">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://edvison.cn/assets/images/1.png"/>
+    
+    
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/font-awesome.css">
+    <link rel="stylesheet" href="/assets/css/jquery.fancybox.css">
+    <link rel="stylesheet" href="/assets/css/thumbs.css">
+    <link rel="stylesheet" href="/assets/css/tranquilpeak.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="5">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Edvison&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="5">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+                </a>
+                <h4 class="sidebar-profile-name">Edvison</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>Just the way you are</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link open-algolia-search"
+                             href="#search"
+                            
+                            title="search"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-search" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">search</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="about"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">about</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/edvison" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="E-Mail">
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-envelope-o" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">E-Mail</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/atom.xml"
+                            
+                            title="RSS"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-rss" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">RSS</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+            <div id="main" data-behavior="5"
+                 class="
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+        <div class="post-header main-content-wrap text-left">
+    
+        <h1 class="post-title">
+            Android逆向工具：非通常方法
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2018-07-25T17:40:35+08:00">
+	
+		    25 Jul 2018
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/Reverse/">Reverse</a>
+
+
+    
+</div>
+
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>本文是<a href="https://www.virusbulletin.com/virusbulletin/2018/04/vb2017-paper-android-reverse-engineering-tools-not-usual-suspects" target="_blank" rel="noopener">Android reverse engineering tools: not the usual suspects</a>的翻译文章。<br><a id="more"></a></p>
+<h1 id="table-of-contents">Inhaltsverzeichnis</h1><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#摘要"><span class="toc-text">摘要</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#1-简介"><span class="toc-text">1.简介</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#2-适用于Android逆向的Docker镜像"><span class="toc-text">2. 适用于Android逆向的Docker镜像</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#2-1-为什么使用Docker镜像？"><span class="toc-text">2.1 为什么使用Docker镜像？</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-2-镜像创建技巧"><span class="toc-text">2.2 镜像创建技巧</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-1-Docker-和-GUI"><span class="toc-text">2.2.1 Docker 和 GUI</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-2-两个命令"><span class="toc-text">2.2.2 两个命令</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-3-密码"><span class="toc-text">2.2.3 密码</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-4-Android模拟器"><span class="toc-text">2.2.4 Android模拟器</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-5-磁盘空间"><span class="toc-text">2.2.5 磁盘空间</span></a></li></ol></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#3-JEB2脚本"><span class="toc-text">3. JEB2脚本</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#3-1-为脚本设置JEB2"><span class="toc-text">3.1 为脚本设置JEB2</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-2-去混淆脚本目标"><span class="toc-text">3.2 去混淆脚本目标</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-3-脚本开发"><span class="toc-text">3.3 脚本开发</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#4-调试"><span class="toc-text">4. 调试</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#4-1-CodeInspect"><span class="toc-text">4.1 CodeInspect</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#4-2-JEB2"><span class="toc-text">4.2 JEB2</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#4-3-结论"><span class="toc-text">4.3 结论</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#5-HTTPS-流量检查"><span class="toc-text">5. HTTPS 流量检查</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#6-Radare2"><span class="toc-text">6. Radare2</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#6-1-Dalvik支持"><span class="toc-text">6.1 Dalvik支持</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-2-逆向DEX的命令"><span class="toc-text">6.2 逆向DEX的命令</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-3-脚本"><span class="toc-text">6.3 脚本</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-4-讨论"><span class="toc-text">6.4 讨论</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#7-结论-要点"><span class="toc-text">7. 结论/要点</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#参考"><span class="toc-text">参考</span></a></li></ol>
+<h1 id="摘要"><a href="#摘要" class="headerlink" title="摘要"></a>摘要</h1><p>在Android安全领域，所有逆向工程师可能都会使用一些著名的分析工具，如apktool，smali，baksmali，dex2jar等。这些工具确实是Android应用程序分析的必备工具。 但是，还有其他有趣的工具和问题，很少在会议中涉及，这些都是本文的内容。</p>
+<p>本文讨论下面五个点：（1）如何为Android应用程序分析共享逆向工程环境，（2）如何编写JEB2脚本，（3）Android调试器的状态，（4）如何读取TLS加密通信， （5）如何在Dalvik上使用Radare2。</p>
+<h1 id="1-简介"><a href="#1-简介" class="headerlink" title="1.简介"></a>1.简介</h1><p>Android逆向是现在在互联网上广泛涉及的主题，这里有一些关于Android逆向的视频，文章教程[<a href="https://www.rsaconference.com/" target="_blank" rel="noopener">1</a>, <a href="http://www.fasteque.com/androidreverse-engineering-101-part-1/" target="_blank" rel="noopener">2</a>, <a href="https://media.blackhat.com/bh-ad-11/Desnos/bh-ad-11-DesnosGueguen-Andriod-Reversing_to_Decompilation_WP.pdf" target="_blank" rel="noopener">3</a>, <a href="https://www.evilsocket.net/2017/04/27/Android-Applications-Reversing-101/" target="_blank" rel="noopener">4</a>]，所有这些都提供了大致相同的步骤（什么是APK，什么是Android清单，如何解压缩，阅读smali，反编译，重新组装APK）并使用相同的工具（apktool，smali / baksmali，AXMLPrinter，Java Decompiler，Androguard）。 事实上，这种方法是完美的，工具非常方便，我鼓励阅读这些链接。</p>
+<p>那些在该领域工作的人（例如反病毒分析员）也面临许多其他高级问题，其中之一是需要对高级样本进行解包或去混淆。 研究人员已经多次讨论过这种情况[<a href="#参考">5</a>, <a href="#参考">6</a>, <a href="#参考">7</a>, <a href="https://www.virusbulletin.com/virusbulletin/2016/01/paper-android-packers-facing-challenges-building-solutions/" target="_blank" rel="noopener">8</a>]。但是，其他几个问题仍然没有答案。 在本文中，我们将解决以下问题：</p>
+<ul>
+<li>如何与他人共享Android程序的逆向环境。</li>
+<li>如何编写Android逆向工具脚本以简化样本分析。</li>
+<li>是否可以调试可疑应用程序，设置断点并逐步运行它以了解发生的情况。</li>
+<li>随着Android程序开发人员现在越来越多地使用HTTPS，我们将考虑如何检查SSL / TLS加密的应用程序流。</li>
+<li>我们是否可以超越常规，使用除了通常的apktool，baksmali之外的反汇编程序。<br>本文从移动反病毒分析师的角度处理这些独立问题。 但是，这些技术适用于任何Android程序的逆向。 每个问题都在自己的章节中讨论。</li>
+</ul>
+<h1 id="2-适用于Android逆向的Docker镜像"><a href="#2-适用于Android逆向的Docker镜像" class="headerlink" title="2. 适用于Android逆向的Docker镜像"></a>2. 适用于Android逆向的Docker镜像</h1><h2 id="2-1-为什么使用Docker镜像？"><a href="#2-1-为什么使用Docker镜像？" class="headerlink" title="2.1 为什么使用Docker镜像？"></a>2.1 为什么使用Docker镜像？</h2><p>反病毒分析师必须在干净的环境中检查每个可疑样本。 有时，您还需要与同事共享样本，以获得他/她对特定点的建议。唉，建立一个逆向工程环境非常耗时。严格来说，这并不困难，但有许多不同的工具可以安装（apktool，baksmali，Java Decompiler，AXMLPrinter，Android模拟器…），每个都有不同的设置步骤，没有自动化程序。</p>
+<p>因此，Android程序的便携式逆向环境是最有用的。 为了创建这样的环境，一些计划已经提出了具有所有必要工具的虚拟机。例如，有Android逆向工程（ARE）VM [<a href="https://redmine.honeynet.org/projects/are/wiki" target="_blank" rel="noopener">9</a>]或Androl4b VM [<a href="https://github.com/sh4hin/Androl4b" target="_blank" rel="noopener">10</a>]。 VM的缺点是您必须下载千兆字节的信息（整个Linux主机以及Android工具），并且您获得的环境通常已经过时，因为VM尚未维护。</p>
+<p>为了解决这些问题，我提出了使用Android逆向的Docker镜像。 Docker [<a href="https://www.docker.com/" target="_blank" rel="noopener">11</a>]是一个开源项目，可以自动在软件容器内部署应用程序[<a href="https://en.wikipedia.org/wiki/Docker_(software" target="_blank" rel="noopener">12</a>)]。 与完整VM相比，下载大小减少，因为：</p>
+<ul>
+<li>Docker容器依赖于主机的底层操作系统，不需要包含完整的操作系统[<a href="https://blog.docker.com/2016/03/containers-are-not-vms/" target="_blank" rel="noopener">13</a>]。</li>
+<li>Docker镜像由多个层组成，就像下载块一样。 这些图层可以在镜像中重复使用，因此如果给定镜像使用图层A和B，而另一镜像使用B和C，则不需要重新下载B.</li>
+</ul>
+<p>我的Docker镜像已经上传到Docker Hub了，可以使用Docker命令docker pull直接下载。 确切地说，使用我的环境的步骤是：</p>
+<ul>
+<li>安装Docker（如果你还没有这样做的话）。</li>
+<li>检索Android RE Docker镜像：<br><code>docker pull cryptax/android-re</code></li>
+<li>启动一个（或多个）容器：<br><code>docker run -d options cryptax/android-re</code><br>您可以立即获得一个独立的Linux主机，您可以通过该主机SSH或使用VNC（桌面共享）并访问Android逆向工具和模拟器。<br>Docker镜像的使用也改善了维护问题。 实际上，Docker镜像是从Dockerfile构建的，就像创建镜像的“源脚本”一样。 例如，Dockerfile指定要安装的每个包以及设置容器所需的命令。 这个Dockerfile在[<a href="https://github.com/cryptax/androidre" target="_blank" rel="noopener">14</a>]共享，你可以根据自己的需要自由定制，或者将它更新到这个或那个更新的版本。</li>
+</ul>
+<h2 id="2-2-镜像创建技巧"><a href="#2-2-镜像创建技巧" class="headerlink" title="2.2 镜像创建技巧"></a>2.2 镜像创建技巧</h2><p>在本小节中，我分享了一些技巧，用于为Docker镜像设置Dockerfile。</p>
+<h3 id="2-2-1-Docker-和-GUI"><a href="#2-2-1-Docker-和-GUI" class="headerlink" title="2.2.1 Docker 和 GUI"></a>2.2.1 Docker 和 GUI</h3><p>Docker特别适合创建包含守护进程，服务，Web服务器等的隔离专区。令人惊讶的是，对图形应用程序的支持并不容易，并且有许多问题和博客文章[<a href="http://fabiorehm.com/blog/2014/09/11/running-gui-apps-withdocker/" target="_blank" rel="noopener">15</a>]。 基本上，Docker容器被视为远程Unix主机，有三种选择（可见下表）：</p>
+<ul>
+<li><p>与容器共享您的显示器。 运行xhost +。 然后启动容器，并在选项中确保共享DISPLAY环境变量和X11套接字：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">docker run -d -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix</span><br><span class="line">OTHER-OPTIONS --name mycontainer cryptax/android-re</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>在SSH中使用X转发。 这再次依赖于X11。 通过SSH连接到容器时，请指定选项-X以启用X11转发。</p>
+</li>
+<li>使用VNC。 在这种情况下，图形应用程序的显示由容器处理。 容器包含VNC服务器（图形桌面共享系统）。 使用容器时，将VNC客户端连接到容器的VNC服务器并共享其桌面。<br>Android模拟器需要GLX支持。 因此，容器必须配置支持GLX的X11显示服务器。 例如：<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Xvfb :1 +extension GLX +render -noreset -screen 0 1280x1024x24&amp;</span><br><span class="line">DISPLAY=:1 /usr/bin/xfce4-session &gt;&gt; /root/xsession.log 2&gt;&amp;1 &amp;</span><br></pre></td></tr></table></figure>
+</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>解决方法</th>
+<th>优点</th>
+<th>缺点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>分享显示</td>
+<td>轻量级</td>
+<td>仅适用于支持X11的主机（有时会有错误）</td>
+</tr>
+<tr>
+<td>SSH X转发</td>
+<td>轻量级</td>
+<td>不适用与Windows,Mac上有bug</td>
+</tr>
+<tr>
+<td>VNC查看器</td>
+<td>需要安装vncviewer</td>
+<td>由容器设置的屏幕分辨率。容器窗口出现在VNC查看器窗口内。 容器需要包含窗口管理器和X11服务器。</td>
+</tr>
+</tbody>
+</table>
+<h3 id="2-2-2-两个命令"><a href="#2-2-2-两个命令" class="headerlink" title="2.2.2 两个命令"></a>2.2.2 两个命令</h3><p>因此，如果我们想要更灵活地使用，我们的Docker镜像将需要（1）SSH服务器和（2）容器中的VNC服务器。 通常，服务器通过CMD在Dockerfile中启动。 例如：<br><code>CMD [&quot;/usr/sbin/sshd&quot;, &quot;-D&quot;]</code><br>如果我们为VNC指定另一个CMD，我们会感到惊讶：Dockerfiles不支持多个CMD。 最后一个CMD取代之前的所有CMD。 推荐的解决方案是使用 supervisor[<a href="http://blog.trifork.com/2014/03/11/using-supervisor-with-docker-tomanage-processes-supporting-imageinheritance/" target="_blank" rel="noopener">16</a>]，一个过程控制系统。<br>在我们的例子中，我们配置supervisor启动SSH和VNC，并运行supervisord。 在下图中，第4行和第5行配置SSH服务器。 第6行和第7行启动个人脚本startXvfb.sh，它启动Xvfb和VNC服务器。<br><img src="https://xzfile.aliyuncs.com/media/upload/picture/20180725102009-40b79f56-8fb1-1.png" alt=""></p>
+<h3 id="2-2-3-密码"><a href="#2-2-3-密码" class="headerlink" title="2.2.3 密码"></a>2.2.3 密码</h3><p>登录VNC服务器的密码在Dockerfile中进行了硬编码：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">ENV VNC_PASSWORD &quot;rootpass&quot;</span><br><span class="line">RUN x11vnc -storepasswd $VNC_PASSWORD ˜/.vnc/passwd</span><br></pre></td></tr></table></figure></p>
+<p>SSH密码也是硬编码的。 由于我们需要一个简单的环境，因此只有一个用户root。 所以root需要能够SSH。 默认情况下这是不可能的; 需要修改SSH服务器配置以授权root登录：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">RUN echo &quot;root:$SSH_PASSWORD&quot; | chpasswd</span><br><span class="line">RUN sed -i &apos;s/PermitRootLogin prohibit-password/PermitRootLogin yes/&apos; /etc/ssh/sshd_config</span><br><span class="line">RUN sed &apos;s@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g&apos; -i /etc/pam.d/sshd</span><br></pre></td></tr></table></figure></p>
+<p>请注意，您可能希望针对自己的环境进行更改。 使用硬编码密码也意味着Docker容器不应在Web上公开提供。</p>
+<h3 id="2-2-4-Android模拟器"><a href="#2-2-4-Android模拟器" class="headerlink" title="2.2.4 Android模拟器"></a>2.2.4 Android模拟器</h3><p>Dockerfile中的一个重要步骤是安装Android模拟器。 通常，Android模拟器使用名为android的图形工具安装。 实际上，android也可以在命令行中运行，因此可以在Dockerfile中使用。 步骤是：</p>
+<ul>
+<li><p>下载Android SDK，解压缩并设置路径。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">RUN wget -q -O &quot;/opt/tools-linux.zip&quot; https://dl.google.com/android/repository/...</span><br><span class="line">RUN unzip /opt/tools-linux.zip ...</span><br><span class="line">...</span><br><span class="line">ENV PATH $PATH:/opt:...</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>然后，您可以使用android更新SDK工具，平台工具和构建工具，获取Android版本并获取给定体系结构（例如ARM）的系统映像：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">RUN echo y | android update sdk --filter tools --no-ui --force -a</span><br><span class="line">RUN echo y | android update sdk --filter platform-tools --no-ui --force -a</span><br></pre></td></tr></table></figure>
+</li>
+</ul>
+<p>由于命令行android要求用户确认，因此需要echo y以在用户输入的后台运行命令。</p>
+<ul>
+<li>创建Android虚拟设备（AVD）<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">RUN echo n | android create avd --force --name AVDNAME --target ANDROID-VERSION --abi &quot;default/armeabi-v7a&quot;</span><br></pre></td></tr></table></figure>
+</li>
+</ul>
+<p>最后一步是导出Android模拟器使用的端口。 默认情况下使用的第一个控制台端口是5554. Docker容器必须打开该端口，以便您可以远程登录到Android模拟器控制台。</p>
+<h3 id="2-2-5-磁盘空间"><a href="#2-2-5-磁盘空间" class="headerlink" title="2.2.5 磁盘空间"></a>2.2.5 磁盘空间</h3><p>最后，要考虑磁盘空间。 如果我们在Dockerfile中配置了许多软件包，那么容器将是巨大的，与使用VM相比，我们将获得很少的收益。 Dockerfile只需要与使用的东西一起设置（你可以自定义我的，删除你不需要的东西）。 此外，清理包缓存也很好。 网上有几个最佳实践，解释了如何优化一个Dockerfile [<a href="https://docs.docker.com/engine/userguide/eng-image/dockerfile_bestpractices/" target="_blank" rel="noopener">17</a>]。</p>
+<h1 id="3-JEB2脚本"><a href="#3-JEB2脚本" class="headerlink" title="3. JEB2脚本"></a>3. JEB2脚本</h1><p>JEB是一个图形化的Android程序反编译器，由PNF Software商业化，并且经常被该领域的人们使用。 与IDA Pro类似，逆向工程任务可以通过Python代码自2.0.14版（JEB2）编写脚本。更有趣的是自动执行必须针对给定分析执行的可重复的繁琐任务。 PNF软件提供文档[<a href="https://www.pnfsoftware.com/jeb2/manual/dev/writing-client-scripts/" target="_blank" rel="noopener">18</a>]和博客文章[<a href="https://www.pnfsoftware.com/blog/writingjeb2-scripts-in-python/" target="_blank" rel="noopener">19</a>]来帮助编写您的第一个脚本，但这些示例都过于简单（打印hello world）并不能帮助逆向工程师完成实际任务。<br>本节将介绍如何实现字符串反混淆器 - 反转恶意样本时的常见要求 - 作为JEB2脚本，以Android / Ztorg示例为例（sha256：2c546ad7f102f2f345f30f556b8d8162bd365a7f1a52967fce906d46a2b0dac4）。</p>
+<h2 id="3-1-为脚本设置JEB2"><a href="#3-1-为脚本设置JEB2" class="headerlink" title="3.1 为脚本设置JEB2"></a>3.1 为脚本设置JEB2</h2><p>第一个预备步骤是安装。 在文档中并不总是那么清楚，幸运的是这很简单：首先安装Jython（Python for Java平台），然后将脚本放在./JEB-HOME/scripts目录中。 此外，请确保为API参考[<a href="https://www.pnfsoftware.com/jeb2/apidoc/reference/packages.html" target="_blank" rel="noopener">20</a>]添加书签，因为这是脚本开发的必备条件。</p>
+<h2 id="3-2-去混淆脚本目标"><a href="#3-2-去混淆脚本目标" class="headerlink" title="3.2 去混淆脚本目标"></a>3.2 去混淆脚本目标</h2><p>我们注意到Ztorg示例使用字符串混淆。 混淆的字符串作为字节数组加载（没有明显的意义）并由例程解码 - 特别是在这种情况下，通过包a.b中的类c的方法a()（样本也模糊了名称，如您所见） - 解码例程已在[<a href="#参考">21</a>]中反转。<br><img src="https://xzfile.aliyuncs.com/media/upload/picture/20180725102009-40d38464-8fb1-1.png" alt=""></p>
+<p>我们希望找到初始化这些混淆字符串的所有类，并自动对它们进行去混淆。 结果如图所示。<br><img src="https://xzfile.aliyuncs.com/media/upload/picture/20180725102009-40e76420-8fb1-1.png" alt=""></p>
+<h2 id="3-3-脚本开发"><a href="#3-3-脚本开发" class="headerlink" title="3.3 脚本开发"></a>3.3 脚本开发</h2><p>我们提到官方文档太基础了，但是PNF软件在GitHub上提供了几个示例脚本[<a href="https://github.com/pnfsoftware/jeb2-samplecode/tree/master/scripts" target="_blank" rel="noopener">22</a>]。 最接近我们需求的是JEB2JavaASTDecryptStrings.py，它是我们脚本的基础。<br>我的脚本可在[<a href="https://github.com/cryptax/misccode/blob/master/DeobfuscateZtorg.py" target="_blank" rel="noopener">23</a>]获得。<br>基本上，我们保留示例的开头：导入，后端引擎的初始化，打开第一个项目并枚举反编译的类。 原始脚本（类重命名，删除了一些不必要的行）的变化很少，直到那一点（JEB2JavaASTDecryptStrings.py的第45行 - 对应于我自己脚本的第35行）。<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">self.units = RuntimeProjectUtil.findUnitsByType(prj, IJavaSourceUnit, False)</span><br></pre></td></tr></table></figure></p>
+<p>在Ztorg示例中，我们注意到反编译的字符串总是位于静态类构造函数中：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">static &#123;</span><br><span class="line">b.a = c.a(new byte[]&#123;15, 116, 8&#125;);</span><br><span class="line">b.b = c.a(new byte[]&#123;110, 114, 105, 111&#125;);</span><br><span class="line">b.c = c.a(new byte[]&#123;105, 4, 25, 8, 21,</span><br><span class="line">,! 107, 8&#125;);</span><br><span class="line">b.d = c.a(new byte[]&#123;85, 29, 66&#125;);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>所以，第一步是找到静态构造函数：</p>
+<ul>
+<li>1.获取代表该类的JEB2对象：<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">javaClass = unit.getClassElement()</span><br></pre></td></tr></table></figure>
+</li>
+</ul>
+<p>在API中，这将返回IJavaClass类型的对象（请参阅API中的IJavaSourceUnit中的getClassElement）。</p>
+<ul>
+<li>解析类的所有方法（getMethods（））。</li>
+<li>检查类的名称是否对应于静态构造函数。 之后我们可以休息。<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">if m.getName() == &apos;&lt;clinit&gt;&apos;</span><br></pre></td></tr></table></figure>
+</li>
+</ul>
+<p>然后，我们需要在静态构造函数中找到涉及对去混淆例程的调用的所有行。 在JEB2中，行更精确。 我们解析方法的语句：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">for statement in m.getBody():</span><br></pre></td></tr></table></figure></p>
+<p>有几种类型的语句：函数调用，赋值，条件，返回等。在我们的示例中，模糊字符串出现在赋值中。 所以，我们过滤赋值语句：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">if statement.getElementType() == JavaElementType.Assignment:</span><br></pre></td></tr></table></figure></p>
+<p>这是一个有点棘手的地方，混淆字符串出现在：</p>
+<ul>
+<li>简单的任务。<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">v = c.a(....)</span><br></pre></td></tr></table></figure>
+</li>
+</ul>
+<p>我们使用诸如statement.getRight（）之类的调用检索的赋值的右侧就是对去混淆例程的调用。 这就是我们需要修改的内容<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">v = &apos;&apos;de-obfuscated&apos;&apos;</span><br></pre></td></tr></table></figure></p>
+<ul>
+<li>更复杂的任务<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">v = new String(c.a(....))</span><br></pre></td></tr></table></figure>
+</li>
+</ul>
+<p>赋值的右侧不是调用而是new，它包含对去混淆例程的调用。 我们希望将其转换为：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">v = new String(&apos;&apos;de-obfuscated&apos;&apos;)</span><br></pre></td></tr></table></figure></p>
+<p>因此，要检查语句是否调用去混淆例程，我们必须：</p>
+<ul>
+<li>检查语句的getRight（）是否是对我们例程的调用（例1）。 我们通过检查它的签名La / b / c来匹配例程; - &gt; a（[B]Ljava/lang/String; （记住，解码例程是a.b.c.a（））：<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">getMethod().getSignature()</span><br></pre></td></tr></table></figure>
+</li>
+</ul>
+<p>否则，检查右侧部分是否包含对我们的例程调用的子元素（案例2）。 我们解析元素:<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">for rightsub in statement.getRight().getSubElements():</span><br></pre></td></tr></table></figure></p>
+<p>当我们找到这样的声明时，就需要去混淆。 这就是称之为去混淆方法的点。<br>最后，我们可以在控制台中打印结果，但更好的是，我们希望去混淆的字符串用c.a（…）替换该部分。 下面代码的第1行调用replaceSubElement（）完成这个操作，其中：</p>
+<ul>
+<li>elem是包含c.a（…）的右侧部分，例如statement.getRight（）。</li>
+<li>father是包含该元素的元素。 例如，上层的右侧部分或语句。<br>使用self.cstbuilder.createString（）（第1行）创建新的去混淆字符串，并通过通知它来更新JEB2窗口（unit.notifyListeners（） - 第2行）。<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">father.replaceSubElement(elem, self.cstbuilder.createString(&apos;&apos;.join(map(chr,decbytes))))</span><br><span class="line">unit.notifyListeners(JebEvent(J.UnitChange))</span><br></pre></td></tr></table></figure>
+</li>
+</ul>
+<h1 id="4-调试"><a href="#4-调试" class="headerlink" title="4. 调试"></a>4. 调试</h1><p>Android样本调试是许多逆向工程师的梦想。 特别是在复杂的样本上，将断点放在关键线上，逐步运行代码，检查（甚至修改）变量和堆栈非常方便。 据我所知，有两种工具可以在Dalvik级别完成：JEB2（我们在第3节中提到）和CodeInspect [<a href="https://codeinspect.sit.fraunhofer.de/" target="_blank" rel="noopener">24</a>]。</p>
+<p>我尝试了JEB2 2.2.11版本（撰写本文时的最新版本）和CodeInspect（2016年10月的许可演示版）。 结果对未来有希望，但尚未成熟。</p>
+<h2 id="4-1-CodeInspect"><a href="#4-1-CodeInspect" class="headerlink" title="4.1 CodeInspect"></a>4.1 CodeInspect</h2><p>我在CodeInspect面临的主要问题是它的重量级。 我花了将近三分钟来打开一个调试器。 不过，如果你足够耐心，它运行良好，我成功调试了实例Riskware/InnerSnail!Android (sha256: c5c11408483eb87781af30280b2878890f5741fe63d569ae9<br>e3689c1e550eaa4）<br><img src="https://xzfile.aliyuncs.com/media/upload/picture/20180725102009-41253a34-8fb1-1.png" alt=""></p>
+<p>该示例使用DexClassLoader类加载Dalvik可执行文件。 该文件作为类构造函数中的参数传递，但是使用静态分析我无法找到它的值。 所以我在CodeInspect中打开了这个项目。 Dalvik字节码被转换为Jimple，这是Java的中间表示。 它与smali不同，但易于遵循。 我在相应的行上设置断点，打开调试器并将其附加到现有的模拟器（或者，CodeInspect可以启动另一个）。 它将示例安装在模拟器上，运行到断点并读取变量的值（隐藏的zip文件名）。</p>
+<h2 id="4-2-JEB2"><a href="#4-2-JEB2" class="headerlink" title="4.2 JEB2"></a>4.2 JEB2</h2><p>使用JEB2，步骤基本相同，除了JEB2 GUI不安装和运行应用程序 - 您需要这样做。 要启动应用程序：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">am start -D -S -n PACKAGENAME/ACTIVITYNAME</span><br></pre></td></tr></table></figure></p>
+<p>其中包名称类似于com.mx.cool.videoplayer，活动名称是包名称的相对路径，例如， .activity.MainActivity（不要忘记初始点）。</p>
+<p>我尝试了两个不同的样本：Android/Crosate.A!tr (sha256: 15281dbe2603f5973d53c5fddabbcc3de6ad3ec65146aa2ffb34a779ea604f82)和第3节的Ztorg。<br>不幸的是，我遇到了许多错误和崩溃（我向开发人员报告）当前版本的JEB2，很难完成工作。</p>
+<h2 id="4-3-结论"><a href="#4-3-结论" class="headerlink" title="4.3 结论"></a>4.3 结论</h2><p>希望在未来几个月内，CodeInspect和JEB2的情况都会有所改善。 请注意，运行调试器会话显然会运行示例，因此，在发生严重恶意活动后，不要将断点设置得太远。 此外，如果您修改代码，它会重新编译一个新的应用程序，这可能会在恶意软件分析的情况下引发道德问题，因为它实际上会创建一个新的恶意样本。</p>
+<h1 id="5-HTTPS-流量检查"><a href="#5-HTTPS-流量检查" class="headerlink" title="5. HTTPS 流量检查"></a>5. HTTPS 流量检查</h1><p>好消息：越来越多的Android应用程序使用TLS与远程服务器通信。 然而，对于逆向工程师，尤其是反病毒分析师，这提出了另一个问题，因为通信流现在是加密的，因此是不可读的。 我们怎样才能解密流量？</p>
+<p>解决方案是Man-in-the-Middle（MitM），我们拥有的主机配置为模拟客户端的服务器，相反，模拟服务器的客户端。 当客户端与服务器通信时，MitM主机拦截请求并提供自己的证书，声称它是服务器。 客户端被欺骗，因此加密MitM主机的消息，而不是服务器的消息。 服务器对客户端的响应以相同的方式处理，MitM主机此次声称它是客户端。</p>
+<p>Mitmproxy能够自动执行此操作。 此工具在MitM主机上运行。 它为每次与TLS服务器的通信动态自动生成证书，并解密并显示流经它的数据包（甚至可以进行数据包修改）。</p>
+<p>下图解释了我们逆向工程实验的架构。 Android智能手机和MitM主机位于同一个（Wi-Fi）网络上。<br><img src="https://xzfile.aliyuncs.com/media/upload/picture/20180725102010-41412ac8-8fb1-1.png" alt=""></p>
+<p>为了拦截网络数据包，我们修改手机的Wi-Fi连接配置以使用代理：指定MitM主机的IP地址，默认端口8080（还有其他可能性，但这是最简单的 - 见[25]）。 因此，手机的所有数据包都将转至MitM主机。<br>为了模拟真实服务器，MitM主机生成（假）服务器证书，由其自己的CA签名。 由于手机不知道此CA，因此必须将其添加到手机的SD卡中：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">push /.mitmproxy/mitmproxy-ca-cert.cer</span><br></pre></td></tr></table></figure></p>
+<p>然后在手机上安装证书：设置 - &gt;安全 - &gt;从SD卡安装，然后选择证书。</p>
+<p>设置完成。 启动mitmproxy以开始窃听手机和远程TLS服务器之间的通信。</p>
+<p>例如，我在真正的Android应用程序上执行了这样的MitM来控制智能牙刷（图5）。 与远程服务器<a href="https://app.beam.dental" target="_blank" rel="noopener">https://app.beam.dental</a> 的通信是通过HTTPS进行的，并且在标准网络捕获中显示为加密。 通过mitmproxy，我们能够解密任何数据包并检查其内容。<br><img src="https://xzfile.aliyuncs.com/media/upload/picture/20180725102010-41689e96-8fb1-1.png" alt=""></p>
+<p>请注意，存在一个限制：MitM不适用于使用证书锁定的Android应用。 但是，到目前为止，这种应用还很少见。</p>
+<h1 id="6-Radare2"><a href="#6-Radare2" class="headerlink" title="6. Radare2"></a>6. Radare2</h1><p>Radare2是一个“逆向工程和分析二进制文件的框架”[<a href="https://en.wikipedia.org/wiki/Radare2" target="_blank" rel="noopener">26</a>]。 它是开源的，并且在极客社区中因其命令行交互式shell而广为人知，并且广泛支持许多架构，包括较少使用的架构。</p>
+<p>本节提供有关使用Radare2分析Android恶意软件的提示和技巧，以及反馈。</p>
+<h2 id="6-1-Dalvik支持"><a href="#6-1-Dalvik支持" class="headerlink" title="6.1 Dalvik支持"></a>6.1 Dalvik支持</h2><p>虽然Radare2不是逆向Android程序的直接选择（该领域的人通常更喜欢apktool，baksmali，JD，JEB等组合），但它最近增加了对Dalvik可执行文件的支持（实际上，对Dalvik的支持至少可以追溯到2015年，但在我看来，它只能自2016年底以来才被使用用），对于业余的逆向工程师或Radare2粉丝来说可能是一个有趣的选择。<br>Radare2对APK，Android清单或资源没有任何特别的了解。 它实际上只能在Dalvik可执行文件（.dex）上运行。 它产生Dalvik字节码。 没有反编译器。<br><img src="https://xzfile.aliyuncs.com/media/upload/picture/20180725102010-41a32b2e-8fb1-1.png" alt=""></p>
+<p>反汇编程序相当不错，偶尔会有错误。 例如，在4月份，我报告了数组数据有效载荷的反汇编中的一个错误[<a href="https://github.com/radare/radare2/issues/7376" target="_blank" rel="noopener">27</a>]。 这几天后就解决了。</p>
+<h2 id="6-2-逆向DEX的命令"><a href="#6-2-逆向DEX的命令" class="headerlink" title="6.2 逆向DEX的命令"></a>6.2 逆向DEX的命令</h2><p>有几个关于如何使用Radare2的教程（例如参见[<a href="https://blog.techorganic.com/2016/03/08/radare-2-in-0x1e-minutes/" target="_blank" rel="noopener">28</a>, <a href="https://www.virusbulletin.com/virusbulletin/2018/04/vb2017-paper-android-reverse-engineering-tools-not-usual-suspects/%20https://www.megabeets.net/a-journeyinto-radare-2-part-1/" target="_blank" rel="noopener">29</a>, <a href="http://radare.tv/" target="_blank" rel="noopener">30</a>, <a href="http://www.radare.org/r/talks.html" target="_blank" rel="noopener">31</a>]）。 在本小节中，我们只关注处理Dalvik可执行文件的特殊性。</p>
+<p>首先，我们在DEX上启动Radare2：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">r2 -e asm.payloads=true classes.dex</span><br></pre></td></tr></table></figure></p>
+<p>然后，我们需要用命令aa分析所有标志。 不幸的是，这个步骤目前在一些样品上很长（在某些情况下长达10分钟！）。</p>
+<p>以下命令对DEX最有用：</p>
+<ul>
+<li><p>搜索对DEX特别有用，因为可执行文件格式包含字符串池，但也包含类和方法的文本名称。 因此，grep对于给定的常量（iz~string），导入（ii~string），类名（ic~string），函数名（afl~string）和字节码（pd LINES @ FUNC~string）非常有用。 注意~和要搜索的字符串之间没有空格。 搜索区分大小写。 有些字符表现不佳，例如 斜线显示为下划线。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">0x00064fef 49 str.http:__verisign_controlcenter.com_teapot_gate.php</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>方法分析。 您可以使用seek命令的ADDR或sf FUNC-SYMBOL-NAME跳转到给定方法，或直接在给定地址处反汇编几行：pd LINES @ ADDR。 查找交叉引用也是必须的：axt NAME用于交叉引用给定名称，axf NAME用于交叉引用来自给定名称。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">[0x0001f424]&gt; s 0x00036b30</span><br><span class="line">or</span><br><span class="line">[0x0001f424]&gt; sf sym.Lcom_adobe_flashplayer__UC.method._init___V</span><br><span class="line">[0x00036b30]&gt; pd 10</span><br><span class="line">...</span><br><span class="line">[0x00036b30]&gt; axf sym.Lcom_adobe_flashplayer__UC.method._init___V</span><br><span class="line">C 0x36b30 invoke-direct &#123;v0&#125;, Ljava/lang/Object.&lt;init&gt;()V ; 0xede</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>注释/编辑。 要添加注释，命令是<code>CC这是我的注释@ADDR</code>。 要删除它，<code>CC-</code>。 要重命名一个函数：<code>afn new-name</code>。 目前尚无法重命名局部变量。 afvn v20新名称最终将在一天内推出。</p>
+</li>
+</ul>
+<h2 id="6-3-脚本"><a href="#6-3-脚本" class="headerlink" title="6.3 脚本"></a>6.3 脚本</h2><p>由于其命令行性质，Radare2特别适合脚本编写。 例如，从Radare2提示符，可以使用以下特殊构造调用Python r2脚本：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">#!pipe python ...</span><br></pre></td></tr></table></figure></p>
+<p>脚本本身必须导入r2pipe库[<a href="https://medium.com/@trufae/scripting-r2-with-pipes-47a7e14c50aa" target="_blank" rel="noopener">32</a>]：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">import r2pipe</span><br></pre></td></tr></table></figure></p>
+<p>并且您可以自动执行两个命令：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">r2p=r2pipe.open()</span><br><span class="line">r2p.cmd(your r2 command)</span><br></pre></td></tr></table></figure></p>
+<p>我编写了一个Radare2脚本来解混代Android / Ztorg示例的字符串。 该脚本可在[<a href="https://github.com/cryptax/misccode/blob/master/r2ztorg.py" target="_blank" rel="noopener">33</a>]获得。 它有两个参数：混淆字符串的地址及其长度。 它将：</p>
+<ul>
+<li>读取模糊字符串的地址（作为第一个参数提供）</li>
+<li>跳转到该地址（命令s ADDR）</li>
+<li>将x后面的字节（第二个参数）作为unicode字符串读取（命令p8 BYTES）</li>
+<li>在这些字节上调用去混淆例程并显示结果。<br>据我所知，这是Android恶意软件上Radare2的最先进用法。</li>
+</ul>
+<h2 id="6-4-讨论"><a href="#6-4-讨论" class="headerlink" title="6.4 讨论"></a>6.4 讨论</h2><p>本小节介绍了我对Radare2的个人印象。</p>
+<p>我在简单和复杂的样本上都使用了Radare2：它可以工作。</p>
+<p>不过，在我看来，有一些限制。 我已经提到了运行aa和重命名局部变量所花费的时间，另外：</p>
+<ul>
+<li>Radare2不涉及面向对象的结构。 这意味着它不知道在DEX中实现了哪些类，或者哪些方法。 这使得难以解析样本。 这就是为什么你阅读反汇编代码，直到你发现有趣的东西与r2不兼容。 相反，您将搜索特定的内容（URL，密码，对给定函数的调用）并深入研究。</li>
+<li>入口点检测（命令ie）对Dalvik不起作用。 问题是Radare2不知道清单，所以它怎么能真正找到主要的活动呢？ 它确实发现了入口点，但只有低级别的入口点，如对android.support.v4.app.Fragment的onCreate（）的调用。</li>
+</ul>
+<p>此外，在使用Radare2时，我建议使用大屏幕：每行代码一般都很长。甚至有种视觉模式，每个文本博客都以图形方式显示，但我并不热衷于此。 （我不明白为什么当JD，JEB2和IDA Pro可供喜欢GUI的人使用时，为什么人们会使用Radare2进行GUI - 但这是个人观点。）</p>
+<p>总而言之，我会说我喜欢Radare2，因为它基于命令行，接近代码，可编写脚本。 但我发现很难对样本进行概述并解析它。 对于任何Radare2粉，我肯定会建议使用Radare2 for Android示例。 它运作良好。 但是，如果您是新手，门槛可能太高了。 如果您正在为Android寻找壳，我宁愿推荐Androguard。 如果您喜欢GUI，Radare2肯定不是选项，您应该坚持使用JD或JEB。</p>
+<h1 id="7-结论-要点"><a href="#7-结论-要点" class="headerlink" title="7. 结论/要点"></a>7. 结论/要点</h1><p>以下是本文的内容：</p>
+<ul>
+<li>要共享您的Android逆向工程框架，请考虑使用Docker镜像。 我的镜像可以通过<code>docker pull cryptax/android-re</code>获得，并且可以从[<a href="https://github.com/cryptax/androidre" target="_blank" rel="noopener">14</a>]下载适应它的源。</li>
+<li>要为您的Android示例编写字符串反混淆器，您可以从我的Ztorg去混淆器开始您自己的代码，可在[<a href="https://github.com/cryptax/misccode/blob/master/DeobfuscateZtorg.py" target="_blank" rel="noopener">23</a>]处获得。</li>
+<li>Android程序调试尚未运行。 CodeInspect和JEB2都很有希望，并且有望在未来几个月内实现，但在撰写本文时它们并不能很好地运作。</li>
+<li>Mitmproxy可用于窃听Android程序的加密通信。 设置需要在手机上添加新的CA证书并指定要使用的代理。</li>
+<li>Radare2可用于反转Dalvik可执行文件。 它还可以用于高级分析，例如字符串混淆（代码见[<a href="https://github.com/cryptax/misccode/blob/master/r2ztorg.py" target="_blank" rel="noopener">33</a>]）。 但是，学习如何使用Radare2在开始时有点困难，所以除非有一个非常具体的理由使用Radare2，否则新手可能会更好地坚持使用通常的apktool / baksmali / Java Decompiler（JD）。</li>
+</ul>
+<h1 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h1><p>[1] Oliva Fora, P. Beginners Guide to Reverse Engineering Android Apps. In RSA Conference, February 2014. <a href="https://www.rsaconference.com/writable/presentations/file_upload/stu-w02b-beginners-guide-to-reverseengineering-android-apps.pdf" target="_blank" rel="noopener">https://www.rsaconference.com/writable/presentations/file_upload/stu-w02b-beginners-guide-to-reverseengineering-android-apps.pdf</a>.</p>
+<p>[2] Altomare, D. Android Reverse Engineering 101. Parts 1 to 5. November 2015. <a href="http://www.fasteque.com/androidreverse-engineering-101-part-1/" target="_blank" rel="noopener">http://www.fasteque.com/androidreverse-engineering-101-part-1/</a>.</p>
+<p>[3] Desnos, A.; Gueguen, G. Android: From Reversing to Decompilation. In BlackHat Abu Dhabi, 2011. <a href="https://media.blackhat.com/bh-ad-11/Desnos/bh-ad-11-DesnosGueguen-Andriod-Reversing_to_Decompilation_WP.pdf" target="_blank" rel="noopener">https://media.blackhat.com/bh-ad-11/Desnos/bh-ad-11-DesnosGueguen-Andriod-Reversing_to_Decompilation_WP.pdf</a>.</p>
+<p>[4] Margaritelli, S. Android Applications Reversing 101. April 2017. <a href="https://www.evilsocket.net/2017/04/27/Android-Applications-Reversing-101/" target="_blank" rel="noopener">https://www.evilsocket.net/2017/04/27/Android-Applications-Reversing-101/</a>.</p>
+<p>[5] Strazzere, T.; Sawyer, J. Android hacker protection level 0. In DEFCON 22, August 2014.</p>
+<p>[6] Apvrille, A.; Nigam, R. Obfuscation in Android malware and how to fight back. In 8th International CARO Workshop, May 2014.</p>
+<p>[7] Lipovsky, R. Obfuzzcation issues. In 8th International CARO Workshop, May 2014.</p>
+<p>[8] Yu, R. Android packers: facing the challenges, building solutions. In Virus Bulletin International Conference, 2014. <a href="https://www.virusbulletin.com/virusbulletin/2016/01/paper-android-packers-facing-challenges-building-solutions/" target="_blank" rel="noopener">https://www.virusbulletin.com/virusbulletin/2016/01/paper-android-packers-facing-challenges-building-solutions/</a>.</p>
+<p>[9] <a href="http://redmine.honeynet.org/projects/are/wiki" target="_blank" rel="noopener">http://redmine.honeynet.org/projects/are/wiki</a>.</p>
+<p>[10] <a href="https://github.com/sh4hin/Androl4b" target="_blank" rel="noopener">https://github.com/sh4hin/Androl4b</a>.</p>
+<p>[11] <a href="https://www.docker.com/" target="_blank" rel="noopener">https://www.docker.com/</a>.</p>
+<p>[12] Wikipedia. <a href="https://en.wikipedia.org/wiki/Docker_(software)" target="_blank" rel="noopener">https://en.wikipedia.org/wiki/Docker_(software)</a>.</p>
+<p>[13] Coleman, M. Containers are not VMs. March 2016. <a href="https://blog.docker.com/2016/03/containers-are-not-vms/" target="_blank" rel="noopener">https://blog.docker.com/2016/03/containers-are-not-vms/</a>.</p>
+<p>[14] Dockerfile. <a href="https://github.com/cryptax/androidre" target="_blank" rel="noopener">https://github.com/cryptax/androidre</a>.</p>
+<p>[15] Rehm, F. Running GUI apps with Docker. September 2014. <a href="http://fabiorehm.com/blog/2014/09/11/running-gui-apps-withdocker/" target="_blank" rel="noopener">http://fabiorehm.com/blog/2014/09/11/running-gui-apps-withdocker/</a>.</p>
+<p>[16] Krijger, Q. Using supervisor with Docker to manage processes (supporting image inheritance). March 2014. <a href="http://blog.trifork.com/2014/03/11/using-supervisor-with-docker-tomanage-processes-supporting-imageinheritance/" target="_blank" rel="noopener">http://blog.trifork.com/2014/03/11/using-supervisor-with-docker-tomanage-processes-supporting-imageinheritance/</a>.</p>
+<p>[17] Best practices for writing Dockerfiles. <a href="https://docs.docker.com/engine/userguide/eng-image/dockerfile_bestpractices/" target="_blank" rel="noopener">https://docs.docker.com/engine/userguide/eng-image/dockerfile_bestpractices/</a>.</p>
+<p>[18] PNF Software. Writing client scripts. <a href="https://www.pnfsoftware.com/jeb2/manual/dev/writing-client-scripts/" target="_blank" rel="noopener">https://www.pnfsoftware.com/jeb2/manual/dev/writing-client-scripts/</a>.</p>
+<p>[19] Falliere, N. Writing JEB2 scripts in Python. November 2015. <a href="https://www.pnfsoftware.com/blog/writingjeb2-scripts-in-python/" target="_blank" rel="noopener">https://www.pnfsoftware.com/blog/writingjeb2-scripts-in-python/</a>.</p>
+<p>[20] PNF Software. JEB API documentation. <a href="https://www.pnfsoftware.com/jeb2/apidoc/reference/packages.html" target="_blank" rel="noopener">https://www.pnfsoftware.com/jeb2/apidoc/reference/packages.html</a>.</p>
+<p>[21] Apvrille, A. Teardown of a recent variant of Android/Ztorg – Part 1 and 2. March 2017. <a href="http://blog.fortinet.com/2017/03/15/teardown-of-a-recentvariant-of-android-ztorg-part-1" target="_blank" rel="noopener">http://blog.fortinet.com/2017/03/15/teardown-of-a-recentvariant-of-android-ztorg-part-1</a> and <a href="http://blog.fortinet.com/2017/03/15/teardown-of-android-ztorg-part-2" target="_blank" rel="noopener">http://blog.fortinet.com/2017/03/15/teardown-of-android-ztorg-part-2</a>.</p>
+<p>[22] <a href="https://github.com/pnfsoftware/jeb2-samplecode/tree/master/scripts" target="_blank" rel="noopener">https://github.com/pnfsoftware/jeb2-samplecode/tree/master/scripts</a>.</p>
+<p>[23] <a href="https://github.com/cryptax/misccode/blob/master/DeobfuscateZtorg.py" target="_blank" rel="noopener">https://github.com/cryptax/misccode/blob/master/DeobfuscateZtorg.py</a>.</p>
+<p>[24] <a href="https://codeinspect.sit.fraunhofer.de/" target="_blank" rel="noopener">https://codeinspect.sit.fraunhofer.de/</a>.</p>
+<p>[25] <a href="http://docs.mitmproxy.org/en/stable/howmitmproxy.html" target="_blank" rel="noopener">http://docs.mitmproxy.org/en/stable/howmitmproxy.html</a>.</p>
+<p>[26] Wikipedia. <a href="https://en.wikipedia.org/wiki/Radare2" target="_blank" rel="noopener">https://en.wikipedia.org/wiki/Radare2</a>.</p>
+<p>[27] <a href="https://github.com/radare/radare2/issues/7376" target="_blank" rel="noopener">https://github.com/radare/radare2/issues/7376</a>.</p>
+<p>[28] Techorganic. Radare2 in 0x1e minutes. March 2016. <a href="https://blog.techorganic.com/2016/03/08/radare-2-in-0x1e-minutes/" target="_blank" rel="noopener">https://blog.techorganic.com/2016/03/08/radare-2-in-0x1e-minutes/</a>.</p>
+<p>[29] A journey into Radare2 part 1. March 2017 <a href="https://www.megabeets.net/a-journeyinto-radare-2-part-1/" target="_blank" rel="noopener">https://www.megabeets.net/a-journeyinto-radare-2-part-1/</a>.</p>
+<p>[30] <a href="http://radare.tv" target="_blank" rel="noopener">http://radare.tv</a>.</p>
+<p>[31] <a href="http://www.radare.org/r/talks.html" target="_blank" rel="noopener">http://www.radare.org/r/talks.html</a>.</p>
+<p>[32] Pancake. Scripting r2 with pipes, May 2015. <a href="https://medium.com/@trufae/scripting-r2-with-pipes-47a7e14c50aa" target="_blank" rel="noopener">https://medium.com/@trufae/scripting-r2-with-pipes-47a7e14c50aa</a>.</p>
+<p>[33] <a href="https://github.com/cryptax/misccode/blob/master/r2ztorg.py" target="_blank" rel="noopener">https://github.com/cryptax/misccode/blob/master/r2ztorg.py</a>.</p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">GETAGGT IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/Android/">Android</a> <a class="tag tag--primary tag--small t-link" href="/tags/Reverse/">Reverse</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/ARM异常向量表攻击/" data-tooltip="ARM异常向量表攻击" aria-label="FRÜHER: ARM异常向量表攻击">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/在linux内核中利用递归/" data-tooltip="在linux内核中利用递归" aria-label="NÄCHSTER: 在linux内核中利用递归">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/Android逆向工具/" title="Teilen auf Facebook">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/Android逆向工具/" title="Teilen auf Twitter">
+                    <i class="fa fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/Android逆向工具/" title="Teilen auf Google Plus">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2018 Edvison. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="5">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/ARM异常向量表攻击/" data-tooltip="ARM异常向量表攻击" aria-label="FRÜHER: ARM异常向量表攻击">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/在linux内核中利用递归/" data-tooltip="在linux内核中利用递归" aria-label="NÄCHSTER: 在linux内核中利用递归">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/Android逆向工具/" title="Teilen auf Facebook">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/Android逆向工具/" title="Teilen auf Twitter">
+                    <i class="fa fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/Android逆向工具/" title="Teilen auf Google Plus">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                <div id="share-options-bar" class="share-options-bar" data-behavior="5">
+    <i id="btn-close-shareoptions" class="fa fa-close"></i>
+    <ul class="share-options">
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/Android逆向工具/">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Teilen auf Facebook</span>
+                </a>
+            </li>
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/Android逆向工具/">
+                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Teilen auf Twitter</span>
+                </a>
+            </li>
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/Android逆向工具/">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Teilen auf Google Plus</span>
+                </a>
+            </li>
+        
+    </ul>
+</div>
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-remove"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+        
+            <h4 id="about-card-name">Edvison</h4>
+        
+            <div id="about-card-bio"><p>Just the way you are</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>二进制、逆向</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover-v1.2.0.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/jquery.js"></script>
+<script src="/assets/js/jquery.fancybox.js"></script>
+<script src="/assets/js/thumbs.js"></script>
+<script src="/assets/js/tranquilpeak.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script src="/live2dw/lib/L2Dwidget.min.js?0c58a1486de42ac6cc1c59c7d98ae887"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","model":{"jsonPath":"/live2dw/assets/wanko.model.json"},"display":{"position":"right","width":100,"height":200},"mobile":{"show":true}});</script></body>
+</html>

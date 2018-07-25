@@ -1,0 +1,547 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hans">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Edvison&#39;s blog">
+    <title>pwn入门 - Edvison&#39;s blog</title>
+    <meta name="author" content="Edvison">
+    
+    
+        <link rel="icon" href="http://edvison.cn/assets/images/favicon.ico">
+    
+    
+        <link rel="alternate" type="application/atom+xml" title="RSS" href="/atom.xml">
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Edvison","sameAs":["https://github.com/edvison","mailto:edvisonmail@163.com"],"image":"1.png"},"articleBody":"之前给学弟学妹做培训用的文档（\n\nWhat’s Pwn?引用维基百科的解释：\n\n在骇客 行话里，尤其在另外一种电脑技术方面，包括电脑（ 伺服器或个人电脑 ）、网站、闸道装置、或是应用程式，”pwn”在这一方面的意思是攻破（”to compromise”，危及、损害）或是控制（”to control”）。 在这一方面的意义上，它与骇客入侵与破解是相同意思的。 例如某一个外部团体已经取得未经公家许可的系统管理员控制权限，并利用这个权限骇入并入侵（”owned” 或是”pwned”）这个系统。\n\n在CTF中pwn大多是给你个二进制文件让你去利用它getshell。\n环境准备这部分不会讲，下面给链接自己去安装工具吧，安装遇到的错误基本都有解决方法，复制错误信息然后谷歌(:з」∠)pwntoolspwntools常用模块gdb-pedagdb常用命令\n缓冲区溢出通过往程序的缓冲区写超出其长度的内容，造成缓冲区的溢出，从而破坏程序的堆栈，造成程序崩溃或使程序转而执行其它指令，以达到攻击的目的。\n来看一个栗子，pwnable.kr的第三题：123456789101112131415161718#include &lt;stdio.h&gt;#include &lt;string.h&gt;#include &lt;stdlib.h&gt;void func(int key)&#123;    char overflowme[32];    printf(\"overflow me : \");    gets(overflowme);    // smash me!    if(key == 0xcafebabe)&#123;        system(\"/bin/sh\");    &#125;    else&#123;        printf(\"Nah..\\n\");    &#125;&#125;int main(int argc, char* argv[])&#123;    func(0xdeadbeef);    return 0;&#125;\n很明显，要我们利用overflowme[32]去覆盖key的值getshell。\n（下面是现场演示时间，有兴趣的同学可以自己先做一下）\n栈基础知识在一次函数调用中，堆栈中将被依次压入：参数，返回地址，EBP。如果函数有局部变量，接下来，就在堆栈中开辟相应的空间以构造变量。函数执行结束，这些局部变量的内容将被丢失。但是不被清除。在函数返回的时候，弹出EBP，恢复堆栈到函数调用的地址,弹出返回地址到EIP以继续执行程序。\n__fastcall函数调用约定：123456789push 参数3    push 参数2push 参数1      #参数由右向左入栈call 函数地址push ebp        #保存当前栈底指针mov ebp,esp     #设置新栈底sub esp, xxx    #设置新栈顶，esp减去所需空间大小\n我们要做的其实就是控制EIP，EIP指令就是指向下一个要执行的命令，而RET指令就相当于POP EIP。当我们控制了EIP为我们想要的地址时，程序正常执行到RET就会自己跳转到我们的EIP了。\n栗子题目，Jarvis OJ pwn的Tell Me Something。\nshellcodeshellcode是一组可注入的指令，可以在被攻击的程序中运行帮助我们获取控制权。最常用的shellcode是execve()的shellcode，在现有的进程空间里执行其他的进程。1\\x31\\xc0\\x50\\x68\\x6e\\x2f\\x73\\x68\\x68\\x2f\\x2f\\x62\\x69\\x89\\xe3\\x50\\x89\\xe2\\x53\\x89\\xe1\\xb0\\x0b\\xcd\\x80\n具体的shellcode编写过程可以看我的这一篇文章\n通常利用shellcode的方法是利用缓冲区溢出将返回地址覆盖成shellcode的地址，常用的覆盖方法有下面两种：\n\nret_nop_shellcode型。将大量的返回地址ret填满缓冲区，接着是大量的nop，然后是shellcode。ret跳到nop区就会一直往下执行到shellcode中。\n\nnop_shellcode_ret型。适用于大缓冲区，将返回地址覆盖为nop的大致位置，跳到nop中，然后继续执行到我们的shellcode中。但是这种方法的定位不是很准确，成功率并不大。\n\n\n栗子，利用栈溢出来在栈上执行我们的shellcode：pwnable.tw的第一题start。\n程序保护机制checksec用来检测程序的保护机制，用例：\n或者是gdb用插件peda：\nCanary（栈保护）也常称为‘金丝雀’，是一种缓解缓冲区溢出攻击的手段。启用栈保护之后就会在程序函数执行时往栈里插入cookie，当函数返回时会检查cookie信息是否正确，当我们利用溢出覆盖函数返回地址时如果将cookie信息也覆盖掉了就会导致栈保护检查失败停止程序运行。\nFortify用于检查是否存在缓冲区溢出错误，但只是很轻微的检查，一般不会开启。\nNX（DEP）用于防止shellcode的执行。基本原理就是将数据所在的内存页标记为不可执行，当程序溢出并试图在数据页面上执行shellcode时，CPU就会抛出异常，不执行shellcode。\nPIE（ASLR）即内存地址随机化机制，将mmap的基址，栈和vdso页面随机化，有时也会开启堆地址随机化。增加攻击者在利用漏洞时找到正确地址的难度。\n其他漏洞linux下存在的漏洞当然远远不止上面提到的那些，比如还有格式化字符串漏洞、堆溢出、整型溢出等等，但考虑到时间以及同学们的接受能力问题，这里不会讲，当然考试也不会考（大概）。有能力的同学还是自己去学习吧：p\nELF病毒既然前两个学长都讲了病毒…如果有时间的话，就来演示下Linux下的elf病毒吧。详细介绍是没时间的，只能演示下linux下的病毒是怎样的2333如果实在是感兴趣可以看我之前写的elf病毒分析 ，从elf文件格式到病毒原理都有介绍。演示病毒是elfmaster写的Skeksi病毒，没有公布源码，但给了消毒程序源码。（另外推荐对linux二进制感兴趣的同学看这个作者写的《linux二进制分析》）作者主页-&gt;http://www.bitlackeys.org \n","dateCreated":"2018-07-25T18:16:24+08:00","dateModified":"2018-07-25T18:16:24+08:00","datePublished":"2018-07-25T18:16:24+08:00","description":"之前给学弟学妹做培训用的文档（","headline":"pwn入门","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://edvison.cn/2018/07/25/pwn入门/"},"publisher":{"@type":"Organization","name":"Edvison","sameAs":["https://github.com/edvison","mailto:edvisonmail@163.com"],"image":"1.png","logo":{"@type":"ImageObject","url":"1.png"}},"url":"http://edvison.cn/2018/07/25/pwn入门/","keywords":"pwn, linux"}</script>
+    <meta name="description" content="之前给学弟学妹做培训用的文档（">
+<meta name="keywords" content="pwn,linux">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="pwn入门">
+<meta property="og:url" content="http://edvison.cn/2018/07/25/pwn入门/index.html">
+<meta property="og:site_name" content="Edvison&#39;s blog">
+<meta property="og:description" content="之前给学弟学妹做培训用的文档（">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2018-07-25T10:16:24.073Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="pwn入门">
+<meta name="twitter:description" content="之前给学弟学妹做培训用的文档（">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://edvison.cn/assets/images/1.png"/>
+    
+    
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/font-awesome.css">
+    <link rel="stylesheet" href="/assets/css/jquery.fancybox.css">
+    <link rel="stylesheet" href="/assets/css/thumbs.css">
+    <link rel="stylesheet" href="/assets/css/tranquilpeak.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="5">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Edvison&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="5">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+                </a>
+                <h4 class="sidebar-profile-name">Edvison</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>Just the way you are</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link open-algolia-search"
+                             href="#search"
+                            
+                            title="search"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-search" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">search</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="about"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">about</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/edvison" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="E-Mail">
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-envelope-o" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">E-Mail</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/atom.xml"
+                            
+                            title="RSS"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-rss" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">RSS</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+            <div id="main" data-behavior="5"
+                 class="
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+        <div class="post-header main-content-wrap text-left">
+    
+        <h1 class="post-title">
+            pwn入门
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2018-07-25T18:16:24+08:00">
+	
+		    25 Jul 2018
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/pwn/">pwn</a>
+
+
+    
+</div>
+
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>之前给学弟学妹做培训用的文档（<br><a id="more"></a></p>
+<h1 id="table-of-contents">Inhaltsverzeichnis</h1><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#What’s-Pwn"><span class="toc-text">What’s Pwn?</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#环境准备"><span class="toc-text">环境准备</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#缓冲区溢出"><span class="toc-text">缓冲区溢出</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#栈基础知识"><span class="toc-text">栈基础知识</span></a></li></ol></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#shellcode"><span class="toc-text">shellcode</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#程序保护机制"><span class="toc-text">程序保护机制</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#checksec"><span class="toc-text">checksec</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Canary（栈保护）"><span class="toc-text">Canary（栈保护）</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Fortify"><span class="toc-text">Fortify</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#NX（DEP）"><span class="toc-text">NX（DEP）</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#PIE（ASLR）"><span class="toc-text">PIE（ASLR）</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#其他漏洞"><span class="toc-text">其他漏洞</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#ELF病毒"><span class="toc-text">ELF病毒</span></a></li></ol>
+<h1 id="What’s-Pwn"><a href="#What’s-Pwn" class="headerlink" title="What’s Pwn?"></a>What’s Pwn?</h1><p>引用维基百科的解释：</p>
+<blockquote>
+<p>在骇客 行话里，尤其在另外一种电脑技术方面，包括电脑（ 伺服器或个人电脑 ）、网站、闸道装置、或是应用程式，”pwn”在这一方面的意思是攻破（”to compromise”，危及、损害）或是控制（”to control”）。 在这一方面的意义上，它与骇客入侵与破解是相同意思的。 例如某一个外部团体已经取得未经公家许可的系统管理员控制权限，并利用这个权限骇入并入侵（”owned” 或是”pwned”）这个系统。</p>
+</blockquote>
+<p>在CTF中pwn大多是给你个二进制文件让你去利用它getshell。</p>
+<h1 id="环境准备"><a href="#环境准备" class="headerlink" title="环境准备"></a>环境准备</h1><p>这部分不会讲，下面给链接自己去安装工具吧，安装遇到的错误基本都有解决方法，复制错误信息然后谷歌<em>(:з」∠)</em><br><a href="http://www.cnblogs.com/xiao3c/p/6799745.html" target="_blank" rel="noopener">pwntools</a><br><a href="http://2456cc35.wiz03.com/share/s/0AlIMR0YIkmh2tjeP42sDMEN11NFyO2NbkRi26CJcu2L8TMX" target="_blank" rel="noopener">pwntools常用模块</a><br><a href="https://github.com/longld/peda" target="_blank" rel="noopener">gdb-peda</a><br><a href="http://2456cc35.wiz03.com/share/s/0AlIMR0YIkmh2tjeP42sDMEN1xJOuz1CpApp25dZwj2Fu6rW" target="_blank" rel="noopener">gdb常用命令</a></p>
+<h1 id="缓冲区溢出"><a href="#缓冲区溢出" class="headerlink" title="缓冲区溢出"></a>缓冲区溢出</h1><p>通过往程序的缓冲区写超出其长度的内容，造成缓冲区的溢出，从而破坏程序的堆栈，造成程序崩溃或使程序转而执行其它指令，以达到攻击的目的。</p>
+<p>来看一个栗子，<a href="http://pwnable.kr/play.php" target="_blank" rel="noopener">pwnable.kr</a>的第三题：<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">func</span><span class="params">(<span class="keyword">int</span> key)</span></span>&#123;</span><br><span class="line">    <span class="keyword">char</span> overflowme[<span class="number">32</span>];</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">"overflow me : "</span>);</span><br><span class="line">    gets(overflowme);    <span class="comment">// smash me!</span></span><br><span class="line">    <span class="keyword">if</span>(key == <span class="number">0xcafebabe</span>)&#123;</span><br><span class="line">        system(<span class="string">"/bin/sh"</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span>&#123;</span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">"Nah..\n"</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span>* argv[])</span></span>&#123;</span><br><span class="line">    func(<span class="number">0xdeadbeef</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>很明显，要我们利用overflowme[32]去覆盖key的值getshell。</p>
+<p>（下面是现场演示时间，有兴趣的同学可以自己先做一下）</p>
+<h3 id="栈基础知识"><a href="#栈基础知识" class="headerlink" title="栈基础知识"></a>栈基础知识</h3><p>在一次函数调用中，堆栈中将被依次压入：参数，返回地址，EBP。如果函数有局部变量，接下来，就在堆栈中开辟相应的空间以构造变量。函数执行结束，这些局部变量的内容将被丢失。但是不被清除。在函数返回的时候，弹出EBP，恢复堆栈到函数调用的地址,弹出返回地址到EIP以继续执行程序。</p>
+<p>__fastcall函数调用约定：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">push 参数3    </span><br><span class="line">push 参数2</span><br><span class="line">push 参数1      #参数由右向左入栈</span><br><span class="line"></span><br><span class="line">call 函数地址</span><br><span class="line"></span><br><span class="line">push ebp        #保存当前栈底指针</span><br><span class="line">mov ebp,esp     #设置新栈底</span><br><span class="line">sub esp, xxx    #设置新栈顶，esp减去所需空间大小</span><br></pre></td></tr></table></figure></p>
+<p>我们要做的其实就是控制EIP，EIP指令就是指向下一个要执行的命令，而RET指令就相当于POP EIP。当我们控制了EIP为我们想要的地址时，程序正常执行到RET就会自己跳转到我们的EIP了。</p>
+<p>栗子题目，<a href="https://www.jarvisoj.com/challenges" target="_blank" rel="noopener">Jarvis OJ pwn</a>的Tell Me Something。</p>
+<h1 id="shellcode"><a href="#shellcode" class="headerlink" title="shellcode"></a>shellcode</h1><p>shellcode是一组可注入的指令，可以在被攻击的程序中运行帮助我们获取控制权。<br>最常用的shellcode是execve()的shellcode，在现有的进程空间里执行其他的进程。<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">\x31\xc0\x50\x68\x6e\x2f\x73\x68\x68\x2f\x2f\x62\x69\x89\xe3\x50\x89\xe2\x53\x89\xe1\xb0\x0b\xcd\x80</span><br></pre></td></tr></table></figure></p>
+<p>具体的shellcode编写过程可以看我的这一篇<a href="http://edvison.cn/2018/02/14/shellcode%E7%BC%96%E5%86%99/">文章</a></p>
+<p>通常利用shellcode的方法是利用缓冲区溢出将返回地址覆盖成shellcode的地址，常用的覆盖方法有下面两种：</p>
+<ul>
+<li><p>ret_nop_shellcode型。将大量的返回地址ret填满缓冲区，接着是大量的nop，然后是shellcode。ret跳到nop区就会一直往下执行到shellcode中。</p>
+</li>
+<li><p>nop_shellcode_ret型。适用于大缓冲区，将返回地址覆盖为nop的大致位置，跳到nop中，然后继续执行到我们的shellcode中。但是这种方法的定位不是很准确，成功率并不大。</p>
+</li>
+</ul>
+<p>栗子，利用栈溢出来在栈上执行我们的shellcode：<a href="https://pwnable.tw/challenge/" target="_blank" rel="noopener">pwnable.tw</a>的第一题start。</p>
+<h1 id="程序保护机制"><a href="#程序保护机制" class="headerlink" title="程序保护机制"></a>程序保护机制</h1><h2 id="checksec"><a href="#checksec" class="headerlink" title="checksec"></a>checksec</h2><p>用来检测程序的保护机制，用例：</p>
+<p>或者是gdb用插件peda：</p>
+<h2 id="Canary（栈保护）"><a href="#Canary（栈保护）" class="headerlink" title="Canary（栈保护）"></a>Canary（栈保护）</h2><p>也常称为‘金丝雀’，是一种缓解缓冲区溢出攻击的手段。启用栈保护之后就会在程序函数执行时往栈里插入cookie，当函数返回时会检查cookie信息是否正确，当我们利用溢出覆盖函数返回地址时如果将cookie信息也覆盖掉了就会导致栈保护检查失败停止程序运行。</p>
+<h2 id="Fortify"><a href="#Fortify" class="headerlink" title="Fortify"></a>Fortify</h2><p>用于检查是否存在缓冲区溢出错误，但只是很轻微的检查，一般不会开启。</p>
+<h2 id="NX（DEP）"><a href="#NX（DEP）" class="headerlink" title="NX（DEP）"></a>NX（DEP）</h2><p>用于防止shellcode的执行。基本原理就是将数据所在的内存页标记为不可执行，当程序溢出并试图在数据页面上执行shellcode时，CPU就会抛出异常，不执行shellcode。</p>
+<h2 id="PIE（ASLR）"><a href="#PIE（ASLR）" class="headerlink" title="PIE（ASLR）"></a>PIE（ASLR）</h2><p>即内存地址随机化机制，将mmap的基址，栈和vdso页面随机化，有时也会开启堆地址随机化。增加攻击者在利用漏洞时找到正确地址的难度。</p>
+<h1 id="其他漏洞"><a href="#其他漏洞" class="headerlink" title="其他漏洞"></a>其他漏洞</h1><p>linux下存在的漏洞当然远远不止上面提到的那些，比如还有格式化字符串漏洞、堆溢出、整型溢出等等，但考虑到时间以及同学们的接受能力问题，这里不会讲，当然考试也不会考（大概）。有能力的同学还是自己去学习吧：p</p>
+<h1 id="ELF病毒"><a href="#ELF病毒" class="headerlink" title="ELF病毒"></a>ELF病毒</h1><p>既然前两个学长都讲了病毒…如果有时间的话，就来演示下Linux下的elf病毒吧。<br>详细介绍是没时间的，只能演示下linux下的病毒是怎样的2333如果实在是感兴趣可以看我之前写的<a href="http://edvison.cn/2018/05/12/elf%E7%97%85%E6%AF%92%E5%88%86%E6%9E%90/">elf病毒分析</a> ，从elf文件格式到病毒原理都有介绍。<br>演示病毒是elfmaster写的Skeksi病毒，没有公布源码，但给了消毒程序源码。（另外推荐对linux二进制感兴趣的同学看这个作者写的《linux二进制分析》）作者主页-&gt;<a href="http://www.bitlackeys.org" target="_blank" rel="noopener">http://www.bitlackeys.org</a> </p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">GETAGGT IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/linux/">linux</a> <a class="tag tag--primary tag--small t-link" href="/tags/pwn/">pwn</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/堆喷射/" data-tooltip="堆喷射" aria-label="FRÜHER: 堆喷射">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/pwn题的搭建/" data-tooltip="pwn题的搭建" aria-label="NÄCHSTER: pwn题的搭建">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/pwn入门/" title="Teilen auf Facebook">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/pwn入门/" title="Teilen auf Twitter">
+                    <i class="fa fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/pwn入门/" title="Teilen auf Google Plus">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2018 Edvison. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="5">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/堆喷射/" data-tooltip="堆喷射" aria-label="FRÜHER: 堆喷射">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/pwn题的搭建/" data-tooltip="pwn题的搭建" aria-label="NÄCHSTER: pwn题的搭建">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/pwn入门/" title="Teilen auf Facebook">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/pwn入门/" title="Teilen auf Twitter">
+                    <i class="fa fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/pwn入门/" title="Teilen auf Google Plus">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                <div id="share-options-bar" class="share-options-bar" data-behavior="5">
+    <i id="btn-close-shareoptions" class="fa fa-close"></i>
+    <ul class="share-options">
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/pwn入门/">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Teilen auf Facebook</span>
+                </a>
+            </li>
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/pwn入门/">
+                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Teilen auf Twitter</span>
+                </a>
+            </li>
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/pwn入门/">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Teilen auf Google Plus</span>
+                </a>
+            </li>
+        
+    </ul>
+</div>
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-remove"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+        
+            <h4 id="about-card-name">Edvison</h4>
+        
+            <div id="about-card-bio"><p>Just the way you are</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>二进制、逆向</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover-v1.2.0.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/jquery.js"></script>
+<script src="/assets/js/jquery.fancybox.js"></script>
+<script src="/assets/js/thumbs.js"></script>
+<script src="/assets/js/tranquilpeak.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script src="/live2dw/lib/L2Dwidget.min.js?0c58a1486de42ac6cc1c59c7d98ae887"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","model":{"jsonPath":"/live2dw/assets/wanko.model.json"},"display":{"position":"right","width":100,"height":200},"mobile":{"show":true}});</script></body>
+</html>
