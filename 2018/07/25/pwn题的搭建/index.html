@@ -71,7 +71,7 @@
                 href="#about">
         
         
-            <img class="header-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+            <img class="header-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
         
         </a>
     
@@ -89,7 +89,7 @@
         
             <div class="sidebar-profile">
                 <a href="/#about">
-                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
                 </a>
                 <h4 class="sidebar-profile-name">Edvison</h4>
                 
@@ -194,10 +194,10 @@
             
                 <li class="sidebar-button">
                     
-                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="E-Mail">
+                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="Mail">
                     
                         <i class="sidebar-button-icon fa fa-lg fa-envelope-o" aria-hidden="true"></i>
-                        <span class="sidebar-button-desc">E-Mail</span>
+                        <span class="sidebar-button-desc">Mail</span>
                     </a>
             </li>
             
@@ -242,7 +242,7 @@
         <div class="post-meta">
     <time datetime="2018-07-25T18:11:45+08:00">
 	
-		    25 Jul 2018
+		    Jul 25, 2018
     	
     </time>
     
@@ -261,7 +261,7 @@
     <div class="post-content markdown">
         <div class="main-content-wrap">
             <p>整理一下以前搭Pwn题的笔记（<br><a id="more"></a></p>
-<h1 id="table-of-contents">Inhaltsverzeichnis</h1><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#pwn题准备"><span class="toc-text">pwn题准备</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#挂载程序到服务器端口"><span class="toc-text">挂载程序到服务器端口</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#远程服务器"><span class="toc-text">远程服务器</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#awd-pwn"><span class="toc-text">awd pwn</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#权限设置"><span class="toc-text">权限设置</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#ssh命令"><span class="toc-text">ssh命令</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#参考链接"><span class="toc-text">参考链接</span></a></li></ol>
+<h1 id="table-of-contents">Table of Contents</h1><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#pwn题准备"><span class="toc-text">pwn题准备</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#挂载程序到服务器端口"><span class="toc-text">挂载程序到服务器端口</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#远程服务器"><span class="toc-text">远程服务器</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#awd-pwn"><span class="toc-text">awd pwn</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#权限设置"><span class="toc-text">权限设置</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#ssh命令"><span class="toc-text">ssh命令</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#参考链接"><span class="toc-text">参考链接</span></a></li></ol>
 <h1 id="pwn题准备"><a href="#pwn题准备" class="headerlink" title="pwn题准备"></a>pwn题准备</h1><p>1.关闭地址空间随机化PIE（ASLR）<br>一般情况下NX（Windows平台上称其为DEP）和地址空间分布随机化（ASLR）会同时工作。<br>用下面这个命令关闭ASLR（开启是2）：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo -s echo 0 &gt; /proc/sys/kernel/randomize_va_space</span><br></pre></td></tr></table></figure></p>
 <p>但是这样关闭了所有程序的随机化还是有一定的风险的，所以可以在程序编译的时候增加参数-no-pie关闭程序的pie，只关闭此程序的随机化，而其它的程序不变</p>
 <p>2.编译pwn程序<br><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">gcc -fno-stack-protector -z execstack -mpreferred-stack-boundary=4 -no-pie -o pwn1 pwn1.c</span><br><span class="line"></span><br><span class="line"><span class="meta">#</span>Ubuntu下面的GCC默认开启了Stack Smashing Protector，</span><br><span class="line"><span class="meta">#</span>如果想在这个系统中学习缓冲区溢出的原理，在编译时要加上fno-stack-protector选项</span><br><span class="line"><span class="meta">#</span>否则运行时会出现*** stack smashing detected ***: xxx terminated，</span><br><span class="line"><span class="meta">#</span>而不是期望的Segmentation fault。同时还需要加上允许栈执行的选项。</span><br><span class="line"></span><br><span class="line"><span class="meta">#</span>-no-pie 关闭aslr</span><br><span class="line"><span class="meta">#</span>-fno-stack-protector用来关闭gcc编译器gs验证码机制, 禁用栈保护</span><br><span class="line"><span class="meta">#</span>-z execstack用来关闭ld链接器堆栈段不可执行机制,关闭NX</span><br></pre></td></tr></table></figure></p>
@@ -289,7 +289,7 @@
     <div id="post-footer" class="post-footer main-content-wrap">
         
             <div class="post-footer-tags">
-                <span class="text-color-light text-small">GETAGGT IN</span><br/>
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
                 
     <a class="tag tag--primary tag--small t-link" href="/tags/linux/">linux</a> <a class="tag tag--primary tag--small t-link" href="/tags/pwn/">pwn</a>
 
@@ -302,18 +302,18 @@
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/pwn入门/" data-tooltip="pwn入门" aria-label="FRÜHER: pwn入门">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/pwn入门/" data-tooltip="pwn入门" aria-label="PREVIOUS: pwn入门">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
-                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
                 </a>
             </li>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/ARM异常向量表攻击/" data-tooltip="ARM异常向量表攻击" aria-label="NÄCHSTER: ARM异常向量表攻击">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/ARM异常向量表攻击/" data-tooltip="ARM异常向量表攻击" aria-label="NEXT: ARM异常向量表攻击">
                 
-                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
                 </a>
             </li>
@@ -321,7 +321,7 @@
     </nav>
     <ul class="post-actions post-action-share">
         <li class="post-action hide-lg hide-md hide-sm">
-            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
                 <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
         </li>
@@ -329,7 +329,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/pwn题的搭建/" title="Teilen auf Facebook">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/pwn题的搭建/" title="Share on Facebook">
                     <i class="fa fa-facebook-official" aria-hidden="true"></i>
                 </a>
             </li>
@@ -337,7 +337,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/pwn题的搭建/" title="Teilen auf Twitter">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/pwn题的搭建/" title="Share on Twitter">
                     <i class="fa fa-twitter" aria-hidden="true"></i>
                 </a>
             </li>
@@ -345,7 +345,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/pwn题的搭建/" title="Teilen auf Google Plus">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/pwn题的搭建/" title="Share on Google+">
                     <i class="fa fa-google-plus" aria-hidden="true"></i>
                 </a>
             </li>
@@ -355,7 +355,7 @@
         
         <li class="post-action">
             
-                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
             
                 <i class="fa fa-list" aria-hidden="true"></i>
             </a>
@@ -388,18 +388,18 @@
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/pwn入门/" data-tooltip="pwn入门" aria-label="FRÜHER: pwn入门">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/pwn入门/" data-tooltip="pwn入门" aria-label="PREVIOUS: pwn入门">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
-                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
                 </a>
             </li>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/ARM异常向量表攻击/" data-tooltip="ARM异常向量表攻击" aria-label="NÄCHSTER: ARM异常向量表攻击">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/ARM异常向量表攻击/" data-tooltip="ARM异常向量表攻击" aria-label="NEXT: ARM异常向量表攻击">
                 
-                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
                 </a>
             </li>
@@ -407,7 +407,7 @@
     </nav>
     <ul class="post-actions post-action-share">
         <li class="post-action hide-lg hide-md hide-sm">
-            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
                 <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
         </li>
@@ -415,7 +415,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/pwn题的搭建/" title="Teilen auf Facebook">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/pwn题的搭建/" title="Share on Facebook">
                     <i class="fa fa-facebook-official" aria-hidden="true"></i>
                 </a>
             </li>
@@ -423,7 +423,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/pwn题的搭建/" title="Teilen auf Twitter">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/pwn题的搭建/" title="Share on Twitter">
                     <i class="fa fa-twitter" aria-hidden="true"></i>
                 </a>
             </li>
@@ -431,7 +431,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/pwn题的搭建/" title="Teilen auf Google Plus">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/pwn题的搭建/" title="Share on Google+">
                     <i class="fa fa-google-plus" aria-hidden="true"></i>
                 </a>
             </li>
@@ -441,7 +441,7 @@
         
         <li class="post-action">
             
-                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
             
                 <i class="fa fa-list" aria-hidden="true"></i>
             </a>
@@ -459,7 +459,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/pwn题的搭建/">
-                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Teilen auf Facebook</span>
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Share on Facebook</span>
                 </a>
             </li>
         
@@ -467,7 +467,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/pwn题的搭建/">
-                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Teilen auf Twitter</span>
+                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
                 </a>
             </li>
         
@@ -475,7 +475,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/pwn题的搭建/">
-                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Teilen auf Google Plus</span>
+                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
                 </a>
             </li>
         
@@ -497,7 +497,7 @@
             <i class="fa fa-remove"></i>
         </div>
         
-            <img id="about-card-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+            <img id="about-card-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
         
             <h4 id="about-card-name">Edvison</h4>
         

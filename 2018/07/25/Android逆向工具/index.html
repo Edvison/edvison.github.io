@@ -79,7 +79,7 @@
                 href="#about">
         
         
-            <img class="header-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+            <img class="header-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
         
         </a>
     
@@ -97,7 +97,7 @@
         
             <div class="sidebar-profile">
                 <a href="/#about">
-                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
                 </a>
                 <h4 class="sidebar-profile-name">Edvison</h4>
                 
@@ -202,10 +202,10 @@
             
                 <li class="sidebar-button">
                     
-                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="E-Mail">
+                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="Mail">
                     
                         <i class="sidebar-button-icon fa fa-lg fa-envelope-o" aria-hidden="true"></i>
-                        <span class="sidebar-button-desc">E-Mail</span>
+                        <span class="sidebar-button-desc">Mail</span>
                     </a>
             </li>
             
@@ -250,7 +250,7 @@
         <div class="post-meta">
     <time datetime="2018-07-25T17:40:35+08:00">
 	
-		    25 Jul 2018
+		    Jul 25, 2018
     	
     </time>
     
@@ -269,7 +269,7 @@
     <div class="post-content markdown">
         <div class="main-content-wrap">
             <p>本文是<a href="https://www.virusbulletin.com/virusbulletin/2018/04/vb2017-paper-android-reverse-engineering-tools-not-usual-suspects" target="_blank" rel="noopener">Android reverse engineering tools: not the usual suspects</a>的翻译文章。<br><a id="more"></a></p>
-<h1 id="table-of-contents">Inhaltsverzeichnis</h1><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#摘要"><span class="toc-text">摘要</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#1-简介"><span class="toc-text">1.简介</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#2-适用于Android逆向的Docker镜像"><span class="toc-text">2. 适用于Android逆向的Docker镜像</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#2-1-为什么使用Docker镜像？"><span class="toc-text">2.1 为什么使用Docker镜像？</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-2-镜像创建技巧"><span class="toc-text">2.2 镜像创建技巧</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-1-Docker-和-GUI"><span class="toc-text">2.2.1 Docker 和 GUI</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-2-两个命令"><span class="toc-text">2.2.2 两个命令</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-3-密码"><span class="toc-text">2.2.3 密码</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-4-Android模拟器"><span class="toc-text">2.2.4 Android模拟器</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-5-磁盘空间"><span class="toc-text">2.2.5 磁盘空间</span></a></li></ol></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#3-JEB2脚本"><span class="toc-text">3. JEB2脚本</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#3-1-为脚本设置JEB2"><span class="toc-text">3.1 为脚本设置JEB2</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-2-去混淆脚本目标"><span class="toc-text">3.2 去混淆脚本目标</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-3-脚本开发"><span class="toc-text">3.3 脚本开发</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#4-调试"><span class="toc-text">4. 调试</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#4-1-CodeInspect"><span class="toc-text">4.1 CodeInspect</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#4-2-JEB2"><span class="toc-text">4.2 JEB2</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#4-3-结论"><span class="toc-text">4.3 结论</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#5-HTTPS-流量检查"><span class="toc-text">5. HTTPS 流量检查</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#6-Radare2"><span class="toc-text">6. Radare2</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#6-1-Dalvik支持"><span class="toc-text">6.1 Dalvik支持</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-2-逆向DEX的命令"><span class="toc-text">6.2 逆向DEX的命令</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-3-脚本"><span class="toc-text">6.3 脚本</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-4-讨论"><span class="toc-text">6.4 讨论</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#7-结论-要点"><span class="toc-text">7. 结论/要点</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#参考"><span class="toc-text">参考</span></a></li></ol>
+<h1 id="table-of-contents">Table of Contents</h1><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#摘要"><span class="toc-text">摘要</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#1-简介"><span class="toc-text">1.简介</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#2-适用于Android逆向的Docker镜像"><span class="toc-text">2. 适用于Android逆向的Docker镜像</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#2-1-为什么使用Docker镜像？"><span class="toc-text">2.1 为什么使用Docker镜像？</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-2-镜像创建技巧"><span class="toc-text">2.2 镜像创建技巧</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-1-Docker-和-GUI"><span class="toc-text">2.2.1 Docker 和 GUI</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-2-两个命令"><span class="toc-text">2.2.2 两个命令</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-3-密码"><span class="toc-text">2.2.3 密码</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-4-Android模拟器"><span class="toc-text">2.2.4 Android模拟器</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2-5-磁盘空间"><span class="toc-text">2.2.5 磁盘空间</span></a></li></ol></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#3-JEB2脚本"><span class="toc-text">3. JEB2脚本</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#3-1-为脚本设置JEB2"><span class="toc-text">3.1 为脚本设置JEB2</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-2-去混淆脚本目标"><span class="toc-text">3.2 去混淆脚本目标</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-3-脚本开发"><span class="toc-text">3.3 脚本开发</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#4-调试"><span class="toc-text">4. 调试</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#4-1-CodeInspect"><span class="toc-text">4.1 CodeInspect</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#4-2-JEB2"><span class="toc-text">4.2 JEB2</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#4-3-结论"><span class="toc-text">4.3 结论</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#5-HTTPS-流量检查"><span class="toc-text">5. HTTPS 流量检查</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#6-Radare2"><span class="toc-text">6. Radare2</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#6-1-Dalvik支持"><span class="toc-text">6.1 Dalvik支持</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-2-逆向DEX的命令"><span class="toc-text">6.2 逆向DEX的命令</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-3-脚本"><span class="toc-text">6.3 脚本</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-4-讨论"><span class="toc-text">6.4 讨论</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#7-结论-要点"><span class="toc-text">7. 结论/要点</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#参考"><span class="toc-text">参考</span></a></li></ol>
 <h1 id="摘要"><a href="#摘要" class="headerlink" title="摘要"></a>摘要</h1><p>在Android安全领域，所有逆向工程师可能都会使用一些著名的分析工具，如apktool，smali，baksmali，dex2jar等。这些工具确实是Android应用程序分析的必备工具。 但是，还有其他有趣的工具和问题，很少在会议中涉及，这些都是本文的内容。</p>
 <p>本文讨论下面五个点：（1）如何为Android应用程序分析共享逆向工程环境，（2）如何编写JEB2脚本，（3）Android调试器的状态，（4）如何读取TLS加密通信， （5）如何在Dalvik上使用Radare2。</p>
 <h1 id="1-简介"><a href="#1-简介" class="headerlink" title="1.简介"></a>1.简介</h1><p>Android逆向是现在在互联网上广泛涉及的主题，这里有一些关于Android逆向的视频，文章教程[<a href="https://www.rsaconference.com/" target="_blank" rel="noopener">1</a>, <a href="http://www.fasteque.com/androidreverse-engineering-101-part-1/" target="_blank" rel="noopener">2</a>, <a href="https://media.blackhat.com/bh-ad-11/Desnos/bh-ad-11-DesnosGueguen-Andriod-Reversing_to_Decompilation_WP.pdf" target="_blank" rel="noopener">3</a>, <a href="https://www.evilsocket.net/2017/04/27/Android-Applications-Reversing-101/" target="_blank" rel="noopener">4</a>]，所有这些都提供了大致相同的步骤（什么是APK，什么是Android清单，如何解压缩，阅读smali，反编译，重新组装APK）并使用相同的工具（apktool，smali / baksmali，AXMLPrinter，Java Decompiler，Androguard）。 事实上，这种方法是完美的，工具非常方便，我鼓励阅读这些链接。</p>
@@ -496,7 +496,7 @@
     <div id="post-footer" class="post-footer main-content-wrap">
         
             <div class="post-footer-tags">
-                <span class="text-color-light text-small">GETAGGT IN</span><br/>
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
                 
     <a class="tag tag--primary tag--small t-link" href="/tags/Android/">Android</a> <a class="tag tag--primary tag--small t-link" href="/tags/Reverse/">Reverse</a>
 
@@ -509,18 +509,18 @@
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/ARM异常向量表攻击/" data-tooltip="ARM异常向量表攻击" aria-label="FRÜHER: ARM异常向量表攻击">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/ARM异常向量表攻击/" data-tooltip="ARM异常向量表攻击" aria-label="PREVIOUS: ARM异常向量表攻击">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
-                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
                 </a>
             </li>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/在linux内核中利用递归/" data-tooltip="在linux内核中利用递归" aria-label="NÄCHSTER: 在linux内核中利用递归">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/在linux内核中利用递归/" data-tooltip="在linux内核中利用递归" aria-label="NEXT: 在linux内核中利用递归">
                 
-                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
                 </a>
             </li>
@@ -528,7 +528,7 @@
     </nav>
     <ul class="post-actions post-action-share">
         <li class="post-action hide-lg hide-md hide-sm">
-            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
                 <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
         </li>
@@ -536,7 +536,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/Android逆向工具/" title="Teilen auf Facebook">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/Android逆向工具/" title="Share on Facebook">
                     <i class="fa fa-facebook-official" aria-hidden="true"></i>
                 </a>
             </li>
@@ -544,7 +544,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/Android逆向工具/" title="Teilen auf Twitter">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/Android逆向工具/" title="Share on Twitter">
                     <i class="fa fa-twitter" aria-hidden="true"></i>
                 </a>
             </li>
@@ -552,7 +552,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/Android逆向工具/" title="Teilen auf Google Plus">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/Android逆向工具/" title="Share on Google+">
                     <i class="fa fa-google-plus" aria-hidden="true"></i>
                 </a>
             </li>
@@ -562,7 +562,7 @@
         
         <li class="post-action">
             
-                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
             
                 <i class="fa fa-list" aria-hidden="true"></i>
             </a>
@@ -595,18 +595,18 @@
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/ARM异常向量表攻击/" data-tooltip="ARM异常向量表攻击" aria-label="FRÜHER: ARM异常向量表攻击">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/ARM异常向量表攻击/" data-tooltip="ARM异常向量表攻击" aria-label="PREVIOUS: ARM异常向量表攻击">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
-                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
                 </a>
             </li>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/在linux内核中利用递归/" data-tooltip="在linux内核中利用递归" aria-label="NÄCHSTER: 在linux内核中利用递归">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/在linux内核中利用递归/" data-tooltip="在linux内核中利用递归" aria-label="NEXT: 在linux内核中利用递归">
                 
-                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
                 </a>
             </li>
@@ -614,7 +614,7 @@
     </nav>
     <ul class="post-actions post-action-share">
         <li class="post-action hide-lg hide-md hide-sm">
-            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
                 <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
         </li>
@@ -622,7 +622,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/Android逆向工具/" title="Teilen auf Facebook">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/Android逆向工具/" title="Share on Facebook">
                     <i class="fa fa-facebook-official" aria-hidden="true"></i>
                 </a>
             </li>
@@ -630,7 +630,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/Android逆向工具/" title="Teilen auf Twitter">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/Android逆向工具/" title="Share on Twitter">
                     <i class="fa fa-twitter" aria-hidden="true"></i>
                 </a>
             </li>
@@ -638,7 +638,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/Android逆向工具/" title="Teilen auf Google Plus">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/Android逆向工具/" title="Share on Google+">
                     <i class="fa fa-google-plus" aria-hidden="true"></i>
                 </a>
             </li>
@@ -648,7 +648,7 @@
         
         <li class="post-action">
             
-                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
             
                 <i class="fa fa-list" aria-hidden="true"></i>
             </a>
@@ -666,7 +666,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/Android逆向工具/">
-                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Teilen auf Facebook</span>
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Share on Facebook</span>
                 </a>
             </li>
         
@@ -674,7 +674,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/Android逆向工具/">
-                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Teilen auf Twitter</span>
+                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
                 </a>
             </li>
         
@@ -682,7 +682,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/Android逆向工具/">
-                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Teilen auf Google Plus</span>
+                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
                 </a>
             </li>
         
@@ -704,7 +704,7 @@
             <i class="fa fa-remove"></i>
         </div>
         
-            <img id="about-card-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+            <img id="about-card-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
         
             <h4 id="about-card-name">Edvison</h4>
         
