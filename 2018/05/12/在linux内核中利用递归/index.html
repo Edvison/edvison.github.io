@@ -77,7 +77,7 @@
                 href="#about">
         
         
-            <img class="header-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
+            <img class="header-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
         
         </a>
     
@@ -95,7 +95,7 @@
         
             <div class="sidebar-profile">
                 <a href="/#about">
-                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
+                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
                 </a>
                 <h4 class="sidebar-profile-name">Edvison</h4>
                 
@@ -200,10 +200,10 @@
             
                 <li class="sidebar-button">
                     
-                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="Mail">
+                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="E-Mail">
                     
                         <i class="sidebar-button-icon fa fa-lg fa-envelope-o" aria-hidden="true"></i>
-                        <span class="sidebar-button-desc">Mail</span>
+                        <span class="sidebar-button-desc">E-Mail</span>
                     </a>
             </li>
             
@@ -248,7 +248,7 @@
         <div class="post-meta">
     <time datetime="2018-05-12T14:13:38+08:00">
 	
-		    May 12, 2018
+		    12 May 2018
     	
     </time>
     
@@ -267,7 +267,7 @@
     <div class="post-content markdown">
         <div class="main-content-wrap">
             <p>本文是<a href="https://googleprojectzero.blogspot.com/2016/06/exploiting-recursion-in-linux-kernel_20.html" target="_blank" rel="noopener">Exploiting Recursion in the Linux Kernel</a>的翻译文章。<br><a id="more"></a></p>
-<h1 id="table-of-contents">Table of Contents</h1><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#前提条件"><span class="toc-text">前提条件</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#漏洞"><span class="toc-text">漏洞</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#漏洞利用"><span class="toc-text">漏洞利用</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#漏洞修复"><span class="toc-text">漏洞修复</span></a></li></ol>
+<h1 id="table-of-contents">Inhaltsverzeichnis</h1><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#前提条件"><span class="toc-text">前提条件</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#漏洞"><span class="toc-text">漏洞</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#漏洞利用"><span class="toc-text">漏洞利用</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#漏洞修复"><span class="toc-text">漏洞修复</span></a></li></ol>
 <h1 id="前提条件"><a href="#前提条件" class="headerlink" title="前提条件"></a>前提条件</h1><p>在Linux上，用户级进程通常具有大约8 MB长的堆栈。如果一个程序溢出堆栈（例如使用无限递归）通常会被堆栈下方的防护页捕获。</p>
 <p>linux內核堆栈是非常不同的（例如在处理系统调用时）。它们相对较短：在32位x86上为4096 8192个字节，在x86-64上为16384个字节。 （内核堆栈大小由THREAD_SIZE_ORDER和THREAD_SIZE指定。）它们使用内核的buddy分配器进行分配，这是内核对页面大小分配的正常分配器（以及两个幂的页数），并且不会创建防护页。这意味着如果内核堆栈溢出，它们会和正常的数据重叠。所以内核代码必须非常小心（在通常情况下），不要在堆栈上进行大的分配，并且必须防止过多的递归。</p>
 <p>Linux上的大多数文件系统都不使用底层设备（伪文件系统，如sysfs，procfs，tmpfs等），或使用块设备（通常是硬盘上的分区）作为后备设备。但是ecryptfs和overlayfs这两个文件系统例外：他们将堆叠文件系统作为后备设备，这些文件系统使用另一个文件系统中的文件夹（或者，在overlayfs中，多个其他文件夹，通常来自不同的文件系统）。（作为后备设备的文件系统称为下层文件系统，下层文件系统中的文件称为下层文件。）<br>堆叠文件系统的想法是它或多或少地转发对较低文件系统的访问，但对传递的数据进行一些修改。 overlayfs将多个文件系统合并成一个通用视图，ecryptfs执行透明加密。</p>
@@ -316,7 +316,7 @@
     <div id="post-footer" class="post-footer main-content-wrap">
         
             <div class="post-footer-tags">
-                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                <span class="text-color-light text-small">GETAGGT IN</span><br/>
                 
     <a class="tag tag--primary tag--small t-link" href="/tags/linux/">linux</a> <a class="tag tag--primary tag--small t-link" href="/tags/内核/">内核</a>
 
@@ -329,18 +329,18 @@
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/Android逆向工具/" data-tooltip="Android逆向工具：非通常方法" aria-label="PREVIOUS: Android逆向工具：非通常方法">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/Android逆向工具/" data-tooltip="Android逆向工具：非通常方法" aria-label="FRÜHER: Android逆向工具：非通常方法">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
-                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
                 </a>
             </li>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/用侧信道读取特权内存/" data-tooltip="用侧信道（side-channel）读取特权内存" aria-label="NEXT: 用侧信道（side-channel）读取特权内存">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/用侧信道读取特权内存/" data-tooltip="用侧信道（side-channel）读取特权内存" aria-label="NÄCHSTER: 用侧信道（side-channel）读取特权内存">
                 
-                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
                 </a>
             </li>
@@ -348,7 +348,7 @@
     </nav>
     <ul class="post-actions post-action-share">
         <li class="post-action hide-lg hide-md hide-sm">
-            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
                 <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
         </li>
@@ -356,7 +356,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/12/在linux内核中利用递归/" title="Share on Facebook">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/12/在linux内核中利用递归/" title="Teilen auf Facebook">
                     <i class="fa fa-facebook-official" aria-hidden="true"></i>
                 </a>
             </li>
@@ -364,7 +364,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/12/在linux内核中利用递归/" title="Share on Twitter">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/12/在linux内核中利用递归/" title="Teilen auf Twitter">
                     <i class="fa fa-twitter" aria-hidden="true"></i>
                 </a>
             </li>
@@ -372,7 +372,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/12/在linux内核中利用递归/" title="Share on Google+">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/12/在linux内核中利用递归/" title="Teilen auf Google Plus">
                     <i class="fa fa-google-plus" aria-hidden="true"></i>
                 </a>
             </li>
@@ -382,7 +382,7 @@
         
         <li class="post-action">
             
-                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
             
                 <i class="fa fa-list" aria-hidden="true"></i>
             </a>
@@ -415,18 +415,18 @@
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/Android逆向工具/" data-tooltip="Android逆向工具：非通常方法" aria-label="PREVIOUS: Android逆向工具：非通常方法">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/Android逆向工具/" data-tooltip="Android逆向工具：非通常方法" aria-label="FRÜHER: Android逆向工具：非通常方法">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
-                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
                 </a>
             </li>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/用侧信道读取特权内存/" data-tooltip="用侧信道（side-channel）读取特权内存" aria-label="NEXT: 用侧信道（side-channel）读取特权内存">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/05/12/用侧信道读取特权内存/" data-tooltip="用侧信道（side-channel）读取特权内存" aria-label="NÄCHSTER: 用侧信道（side-channel）读取特权内存">
                 
-                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
                 </a>
             </li>
@@ -434,7 +434,7 @@
     </nav>
     <ul class="post-actions post-action-share">
         <li class="post-action hide-lg hide-md hide-sm">
-            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
                 <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
         </li>
@@ -442,7 +442,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/12/在linux内核中利用递归/" title="Share on Facebook">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/12/在linux内核中利用递归/" title="Teilen auf Facebook">
                     <i class="fa fa-facebook-official" aria-hidden="true"></i>
                 </a>
             </li>
@@ -450,7 +450,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/12/在linux内核中利用递归/" title="Share on Twitter">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/12/在linux内核中利用递归/" title="Teilen auf Twitter">
                     <i class="fa fa-twitter" aria-hidden="true"></i>
                 </a>
             </li>
@@ -458,7 +458,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/12/在linux内核中利用递归/" title="Share on Google+">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/12/在linux内核中利用递归/" title="Teilen auf Google Plus">
                     <i class="fa fa-google-plus" aria-hidden="true"></i>
                 </a>
             </li>
@@ -468,7 +468,7 @@
         
         <li class="post-action">
             
-                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
             
                 <i class="fa fa-list" aria-hidden="true"></i>
             </a>
@@ -486,7 +486,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/05/12/在linux内核中利用递归/">
-                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Share on Facebook</span>
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Teilen auf Facebook</span>
                 </a>
             </li>
         
@@ -494,7 +494,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/05/12/在linux内核中利用递归/">
-                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
+                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Teilen auf Twitter</span>
                 </a>
             </li>
         
@@ -502,7 +502,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/05/12/在linux内核中利用递归/">
-                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
+                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Teilen auf Google Plus</span>
                 </a>
             </li>
         
@@ -524,7 +524,7 @@
             <i class="fa fa-remove"></i>
         </div>
         
-            <img id="about-card-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
+            <img id="about-card-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
         
             <h4 id="about-card-name">Edvison</h4>
         

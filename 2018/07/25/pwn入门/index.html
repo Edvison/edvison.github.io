@@ -71,7 +71,7 @@
                 href="#about">
         
         
-            <img class="header-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
+            <img class="header-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
         
         </a>
     
@@ -89,7 +89,7 @@
         
             <div class="sidebar-profile">
                 <a href="/#about">
-                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
+                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
                 </a>
                 <h4 class="sidebar-profile-name">Edvison</h4>
                 
@@ -194,10 +194,10 @@
             
                 <li class="sidebar-button">
                     
-                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="Mail">
+                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="E-Mail">
                     
                         <i class="sidebar-button-icon fa fa-lg fa-envelope-o" aria-hidden="true"></i>
-                        <span class="sidebar-button-desc">Mail</span>
+                        <span class="sidebar-button-desc">E-Mail</span>
                     </a>
             </li>
             
@@ -242,7 +242,7 @@
         <div class="post-meta">
     <time datetime="2018-07-25T18:16:24+08:00">
 	
-		    Jul 25, 2018
+		    25 Jul 2018
     	
     </time>
     
@@ -261,7 +261,7 @@
     <div class="post-content markdown">
         <div class="main-content-wrap">
             <p>之前给学弟学妹做培训用的文档（<br><a id="more"></a></p>
-<h1 id="table-of-contents">Table of Contents</h1><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#What’s-Pwn"><span class="toc-text">What’s Pwn?</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#环境准备"><span class="toc-text">环境准备</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#缓冲区溢出"><span class="toc-text">缓冲区溢出</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#栈基础知识"><span class="toc-text">栈基础知识</span></a></li></ol></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#shellcode"><span class="toc-text">shellcode</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#程序保护机制"><span class="toc-text">程序保护机制</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#checksec"><span class="toc-text">checksec</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Canary（栈保护）"><span class="toc-text">Canary（栈保护）</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Fortify"><span class="toc-text">Fortify</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#NX（DEP）"><span class="toc-text">NX（DEP）</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#PIE（ASLR）"><span class="toc-text">PIE（ASLR）</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#其他漏洞"><span class="toc-text">其他漏洞</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#ELF病毒"><span class="toc-text">ELF病毒</span></a></li></ol>
+<h1 id="table-of-contents">Inhaltsverzeichnis</h1><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#What’s-Pwn"><span class="toc-text">What’s Pwn?</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#环境准备"><span class="toc-text">环境准备</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#缓冲区溢出"><span class="toc-text">缓冲区溢出</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#栈基础知识"><span class="toc-text">栈基础知识</span></a></li></ol></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#shellcode"><span class="toc-text">shellcode</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#程序保护机制"><span class="toc-text">程序保护机制</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#checksec"><span class="toc-text">checksec</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Canary（栈保护）"><span class="toc-text">Canary（栈保护）</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Fortify"><span class="toc-text">Fortify</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#NX（DEP）"><span class="toc-text">NX（DEP）</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#PIE（ASLR）"><span class="toc-text">PIE（ASLR）</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#其他漏洞"><span class="toc-text">其他漏洞</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#ELF病毒"><span class="toc-text">ELF病毒</span></a></li></ol>
 <h1 id="What’s-Pwn"><a href="#What’s-Pwn" class="headerlink" title="What’s Pwn?"></a>What’s Pwn?</h1><p>引用维基百科的解释：</p>
 <blockquote>
 <p>在骇客 行话里，尤其在另外一种电脑技术方面，包括电脑（ 伺服器或个人电脑 ）、网站、闸道装置、或是应用程式，”pwn”在这一方面的意思是攻破（”to compromise”，危及、损害）或是控制（”to control”）。 在这一方面的意义上，它与骇客入侵与破解是相同意思的。 例如某一个外部团体已经取得未经公家许可的系统管理员控制权限，并利用这个权限骇入并入侵（”owned” 或是”pwned”）这个系统。</p>
@@ -302,7 +302,7 @@
     <div id="post-footer" class="post-footer main-content-wrap">
         
             <div class="post-footer-tags">
-                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                <span class="text-color-light text-small">GETAGGT IN</span><br/>
                 
     <a class="tag tag--primary tag--small t-link" href="/tags/linux/">linux</a> <a class="tag tag--primary tag--small t-link" href="/tags/pwn/">pwn</a>
 
@@ -315,18 +315,18 @@
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/堆喷射/" data-tooltip="堆喷射" aria-label="PREVIOUS: 堆喷射">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/堆喷射/" data-tooltip="堆喷射" aria-label="FRÜHER: 堆喷射">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
-                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
                 </a>
             </li>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/pwn题的搭建/" data-tooltip="pwn题的搭建" aria-label="NEXT: pwn题的搭建">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/pwn题的搭建/" data-tooltip="pwn题的搭建" aria-label="NÄCHSTER: pwn题的搭建">
                 
-                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
                 </a>
             </li>
@@ -334,7 +334,7 @@
     </nav>
     <ul class="post-actions post-action-share">
         <li class="post-action hide-lg hide-md hide-sm">
-            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
                 <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
         </li>
@@ -342,7 +342,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/pwn入门/" title="Share on Facebook">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/pwn入门/" title="Teilen auf Facebook">
                     <i class="fa fa-facebook-official" aria-hidden="true"></i>
                 </a>
             </li>
@@ -350,7 +350,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/pwn入门/" title="Share on Twitter">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/pwn入门/" title="Teilen auf Twitter">
                     <i class="fa fa-twitter" aria-hidden="true"></i>
                 </a>
             </li>
@@ -358,7 +358,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/pwn入门/" title="Share on Google+">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/pwn入门/" title="Teilen auf Google Plus">
                     <i class="fa fa-google-plus" aria-hidden="true"></i>
                 </a>
             </li>
@@ -368,7 +368,7 @@
         
         <li class="post-action">
             
-                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
             
                 <i class="fa fa-list" aria-hidden="true"></i>
             </a>
@@ -401,18 +401,18 @@
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/堆喷射/" data-tooltip="堆喷射" aria-label="PREVIOUS: 堆喷射">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/堆喷射/" data-tooltip="堆喷射" aria-label="FRÜHER: 堆喷射">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
-                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
                 </a>
             </li>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/pwn题的搭建/" data-tooltip="pwn题的搭建" aria-label="NEXT: pwn题的搭建">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/07/25/pwn题的搭建/" data-tooltip="pwn题的搭建" aria-label="NÄCHSTER: pwn题的搭建">
                 
-                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
                 </a>
             </li>
@@ -420,7 +420,7 @@
     </nav>
     <ul class="post-actions post-action-share">
         <li class="post-action hide-lg hide-md hide-sm">
-            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
                 <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
         </li>
@@ -428,7 +428,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/pwn入门/" title="Share on Facebook">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/pwn入门/" title="Teilen auf Facebook">
                     <i class="fa fa-facebook-official" aria-hidden="true"></i>
                 </a>
             </li>
@@ -436,7 +436,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/pwn入门/" title="Share on Twitter">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/pwn入门/" title="Teilen auf Twitter">
                     <i class="fa fa-twitter" aria-hidden="true"></i>
                 </a>
             </li>
@@ -444,7 +444,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/pwn入门/" title="Share on Google+">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/pwn入门/" title="Teilen auf Google Plus">
                     <i class="fa fa-google-plus" aria-hidden="true"></i>
                 </a>
             </li>
@@ -454,7 +454,7 @@
         
         <li class="post-action">
             
-                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
             
                 <i class="fa fa-list" aria-hidden="true"></i>
             </a>
@@ -472,7 +472,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/07/25/pwn入门/">
-                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Share on Facebook</span>
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Teilen auf Facebook</span>
                 </a>
             </li>
         
@@ -480,7 +480,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/07/25/pwn入门/">
-                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
+                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Teilen auf Twitter</span>
                 </a>
             </li>
         
@@ -488,7 +488,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/07/25/pwn入门/">
-                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
+                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Teilen auf Google Plus</span>
                 </a>
             </li>
         
@@ -510,7 +510,7 @@
             <i class="fa fa-remove"></i>
         </div>
         
-            <img id="about-card-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
+            <img id="about-card-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
         
             <h4 id="about-card-name">Edvison</h4>
         

@@ -1,0 +1,556 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hans">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Edvison&#39;s blog">
+    <title>linux下fuzz初试 - Edvison&#39;s blog</title>
+    <meta name="author" content="Edvison">
+    
+    
+        <link rel="icon" href="http://edvison.cn/assets/images/favicon.ico">
+    
+    
+        <link rel="alternate" type="application/atom+xml" title="RSS" href="/atom.xml">
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Edvison","sameAs":["https://github.com/edvison","mailto:edvisonmail@163.com"],"image":"1.png"},"articleBody":"\n前言本文将介绍两种fuzz工具afl、syzkaller的安装及使用。\n\nAFLAmerican fuzzy lop (“afl-fuzz”)是一种通过提供随机生成的输入来测试软件，搜索能导致程序崩溃的那些输入的fuzz测试工具。它通过对源码进行重新编译时进行插桩的方式自动产生测试用例来探索二进制程序内部新的执行路径。与其他基于插桩技术的fuzzers相比，afl-fuzz具有较低的性能消耗，有各种高效的fuzzing策略和技巧最小化技巧，不需要先行复杂的配置，能无缝处理复杂的现实中的程序。当然AFL也支持直接对没有源码的二进制程序进行测试，但需要QEMU的支持。\n安装afl-fuzz从官网下载源码压缩包，解压。然后编译安装：12makesudo make install\n安装完成后一般需要配置一下，将coredumps输出为文件，而不是把崩溃信息发送到特定的处理程序：1echo core &gt; /proc/sys/kernel/core_pattern\n官方文档：http://lcamtuf.coredump.cx/afl/README.txt\n测试示例对于有源码的测试程序，可以使用afl来代替gcc或clang来编译。用afl的插桩可以优化afl-fuzz的性能，加速fuzz。一般的编译步骤如下：12CC=/path/to/afl/afl-gcc ./configuermake clean all\nC++程序则设置为:1CXX=/path/to/afl/afl-g++\n下面是一个崩溃示例程序：12345678910111213141516171819202122232425262728293031#include &lt;stdio.h&gt;#include &lt;signal.h&gt;int main(int argc, char *argv[])&#123; char buf[233] = &#123;0&#125;; FILE *input = NULL; input = fopen(argv[1], \"r\"); if(input != 0) &#123;  fscanf(input ,\"%s\", &amp;buf);  printf(\"buf is %s\\n\", buf);  func(buf);  fclose(input); &#125; else  printf(\"error!\"); return 0;&#125;int func(char *data)&#123; if(data[0] == 'A')  raise(SIGSEGV); else  printf(\"ok\\n\"); return 0;&#125;\n当输入文件的首字母为A时程序崩溃。\n\n用afl-gcc编译程序，插桩：\n1./afl-gcc test.c -o test\n\n测试testcase是自带的输入目录，Testout是指定的输出目录\n1./afl-fuzz -i testcase -o Testout ./test @@\n\n\n这里使用@@标志，从文件中读取输入。在实际执行的时候会把@@替换成testcase下的测试样本。可以看到很快就出了一个crashe，在输出文件夹里我们可以看到使程序崩溃的输入文件：符合我们的程序崩溃逻辑。\nKernel fuzz – syzkallersyzkaller是一款无监督的覆盖引导内核模糊器。 Linux内核模糊测试支持最多，akaros，freebsd，fuchsia，netbsd，windows和gvisor都有不同程度的支持。我们将用它来进行linux内核模糊测试。\n官方文档：https://github.com/google/syzkaller\n编译内核具体编译不再赘述(可看我这篇笔记)，注意开启下面几个选项就行：1234CONFIG_KCOV=yCONFIG_DEBUG_INFO=yCONFIG_KASAN=yCONFIG_KASAN_INLINE=y\n安装Go语言编译器编译syzkaller，设置环境变量1234567wget https://storage.googleapis.com/golang/go1.8.1.linux-amd64.tar.gztar -xf go1.8.1.linux-amd64.tar.gzmv go gorootexport GOROOT=`pwd`/gorootexport PATH=$GOROOT/bin:$PATHmkdir gopathexport GOPATH=`pwd`/gopath\n安装syzkaller1234go get -u -d github.com/google/syzkaller/...cd gopath/src/github.com/google/syzkaller/mkdir workdirmake\n用Debian-wheezy制作一个镜像安装debootstrap：1sudo apt-get install debootstrap\n用下面的脚本制作镜像：12cd gopath/src/github.com/google/syzkaller/tools/./create-image.sh\n然后是漫长的等待……成功后会在当前目录下看到ssh公钥和私钥文件，以及我们需要的镜像：123wheezy.id_rsawheezy.id_rsa.pubwheezy.img\nqemu启动设置环境变量：12export KERNEL=/home/edvison/linux-kernelexport IMG=/home/edvison/gopath/src/github.com/google/syzkaller/tools\n启动脚本：12345678910qemu-system-x86_64 \\  -kernel $KERNEL/arch/x86_64/boot/bzImage \\  -append &quot;console=ttyS0 root=/dev/sda debug earlyprintk=serial slub_debug=QUZ&quot;\\  -hda $IMG/wheezy.img \\  -net user,hostfwd=tcp::10021-:22 -net nic  --nographic \\  -enable-kvm \\  -m 2G \\  -smp 2 \\  -pidfile vm.pid \\  2&gt;&amp;1 | tee vm.log\n带有ssh服务的qemu虚拟机就配置好了：要结束当前的qemu实例用下面命令：1sudo kill $(cat vm.pid)\n配置无密码登录ssh官方那个ssh登录设置有点迷…用下面的方法好了。用ssh-keygen -t rsa命令在本机生成私钥id_rsa和公钥id_rsa.pub。然后把公钥id_rsa.pub复制到虚拟机上。修改虚拟机上ssh的配置：/etc/ssh/sshd_config1234567891011PermitRootLogin without-passwordRSAAuthentication yesPubkeyAuthentication yesAuthorizedKeysFile\t/root/.ssh/id_rsa.pubRhostsRSAAuthentication yesPermitEmptyPasswords noPasswordAuthentication noUsePAM no\n重启ssh服务：/etc/init.d/ssh restart\n然后在本机上运行下面命令就能无密码登录ssh：1ssh -p 10021 -i id_rsa root@127.0.0.1\n把syzkaller二进制文件复制到虚拟机中1scp -P 10021 -i id_rsa -r $(GOPATH)/bin root@127.0.0.1\n报错：搜了一下，发现是dropbear的key格式和openssh不同，要用dropbearconvert转换一下：安装：sudo apt install dropbear使用方法：1$ dropbearconvert openssh dropbear id_rsa id_rsa_dropbear\n然后就可以用转换过的私钥来连接传输文件了：1scp -P 10021 -i id_rsa_dropbear -r $(GOPATH)/bin root@127.0.0.1\n启动syzkaller编辑配置文件my.cfg：1234567891011121314151617&#123; &quot;target&quot;: &quot;linux/amd64&quot;, &quot;http&quot;: &quot;127.0.0.1:10233&quot;, &quot;workdir&quot;: &quot;$GOPATH/src/github.com/google/syzkaller/workdir&quot;, &quot;kernel_obj&quot;: &quot;$KERNEL&quot;, &quot;image&quot;: &quot;$IMG/wheezy.img&quot;, &quot;sshkey&quot;: &quot;$GOPATH/src/github.com/google/syzkaller/workdir/id_rsa_dropbear&quot;, &quot;syzkaller&quot;: &quot;$GOPATH/src/github.com/google/syzkaller&quot;, &quot;procs&quot;: 4, &quot;type&quot;: &quot;qemu&quot;, &quot;vm&quot;: &#123;  &quot;count&quot;: 4,  &quot;kernel&quot;: &quot;$KERNEL/arch/x86_64/boot/bzImage&quot;,  &quot;cpu&quot;: 2,  &quot;mem&quot;: 2048 &#125;&#125;\n运行：1./bin/syz-manager -config=my.cfg\n之后打开浏览器输入127.0.0.1:10233就能看到一个包括系统调用的覆盖量，syzkaller生成的程序数量,内核被crash的日志报告等的调试信息。","dateCreated":"2018-09-08T15:56:17+08:00","dateModified":"2018-09-08T15:58:09+08:00","datePublished":"2018-09-08T15:56:17+08:00","description":"本文将介绍两种fuzz工具afl、syzkaller的安装及使用。","headline":"linux下fuzz初试","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://edvison.cn/2018/09/08/linux下fuzz初试/"},"publisher":{"@type":"Organization","name":"Edvison","sameAs":["https://github.com/edvison","mailto:edvisonmail@163.com"],"image":"1.png","logo":{"@type":"ImageObject","url":"1.png"}},"url":"http://edvison.cn/2018/09/08/linux下fuzz初试/","keywords":"linux, 内核, fuzz"}</script>
+    <meta name="description" content="本文将介绍两种fuzz工具afl、syzkaller的安装及使用。">
+<meta name="keywords" content="linux,内核,fuzz">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="linux下fuzz初试">
+<meta property="og:url" content="http://edvison.cn/2018/09/08/linux下fuzz初试/index.html">
+<meta property="og:site_name" content="Edvison&#39;s blog">
+<meta property="og:description" content="本文将介绍两种fuzz工具afl、syzkaller的安装及使用。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180908154341-e7a1ab0c-b33a-1.png">
+<meta property="og:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180908154341-e7ad8008-b33a-1.png">
+<meta property="og:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180908154341-e7bcbde8-b33a-1.png">
+<meta property="og:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180908154341-e7c884f2-b33a-1.png">
+<meta property="og:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180908154341-e7d7bc7e-b33a-1.png">
+<meta property="og:updated_time" content="2018-09-08T07:58:09.379Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="linux下fuzz初试">
+<meta name="twitter:description" content="本文将介绍两种fuzz工具afl、syzkaller的安装及使用。">
+<meta name="twitter:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180908154341-e7a1ab0c-b33a-1.png">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://edvison.cn/assets/images/1.png"/>
+    
+    
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/font-awesome.css">
+    <link rel="stylesheet" href="/assets/css/jquery.fancybox.css">
+    <link rel="stylesheet" href="/assets/css/thumbs.css">
+    <link rel="stylesheet" href="/assets/css/tranquilpeak.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="5">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Edvison&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="5">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+                </a>
+                <h4 class="sidebar-profile-name">Edvison</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>Just the way you are</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link open-algolia-search"
+                             href="#search"
+                            
+                            title="search"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-search" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">search</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="about"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">about</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/edvison" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="E-Mail">
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-envelope-o" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">E-Mail</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/atom.xml"
+                            
+                            title="RSS"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-rss" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">RSS</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+            <div id="main" data-behavior="5"
+                 class="
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+        <div class="post-header main-content-wrap text-left">
+    
+        <h1 class="post-title">
+            linux下fuzz初试
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2018-09-08T15:56:17+08:00">
+	
+		    08 Sep 2018
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/linux/">linux</a>
+
+
+    
+</div>
+
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <!-- excerpt -->
+<h1 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h1><p>本文将介绍两种fuzz工具afl、syzkaller的安装及使用。</p>
+<h1 id="table-of-contents">Inhaltsverzeichnis</h1><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#前言"><span class="toc-text">前言</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#AFL"><span class="toc-text">AFL</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#安装afl-fuzz"><span class="toc-text">安装afl-fuzz</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#测试示例"><span class="toc-text">测试示例</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#Kernel-fuzz-–-syzkaller"><span class="toc-text">Kernel fuzz – syzkaller</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#编译内核"><span class="toc-text">编译内核</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#安装Go语言编译器编译syzkaller，设置环境变量"><span class="toc-text">安装Go语言编译器编译syzkaller，设置环境变量</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#安装syzkaller"><span class="toc-text">安装syzkaller</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#用Debian-wheezy制作一个镜像"><span class="toc-text">用Debian-wheezy制作一个镜像</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#qemu启动"><span class="toc-text">qemu启动</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#配置无密码登录ssh"><span class="toc-text">配置无密码登录ssh</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#把syzkaller二进制文件复制到虚拟机中"><span class="toc-text">把syzkaller二进制文件复制到虚拟机中</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#启动syzkaller"><span class="toc-text">启动syzkaller</span></a></li></ol></li></ol>
+<h1 id="AFL"><a href="#AFL" class="headerlink" title="AFL"></a>AFL</h1><p>American fuzzy lop (“afl-fuzz”)是一种通过提供随机生成的输入来测试软件，搜索能导致程序崩溃的那些输入的fuzz测试工具。<br>它通过对源码进行重新编译时进行插桩的方式自动产生测试用例来探索二进制程序内部新的执行路径。<br>与其他基于插桩技术的fuzzers相比，afl-fuzz具有较低的性能消耗，有各种高效的fuzzing策略和技巧最小化技巧，不需要先行复杂的配置，能无缝处理复杂的现实中的程序。当然AFL也支持直接对没有源码的二进制程序进行测试，但需要QEMU的支持。</p>
+<h2 id="安装afl-fuzz"><a href="#安装afl-fuzz" class="headerlink" title="安装afl-fuzz"></a>安装afl-fuzz</h2><p>从<a href="http://lcamtuf.coredump.cx/afl/" target="_blank" rel="noopener">官网</a>下载源码压缩包，解压。然后编译安装：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">make</span><br><span class="line">sudo make install</span><br></pre></td></tr></table></figure></p>
+<p>安装完成后一般需要配置一下，将coredumps输出为文件，而不是把崩溃信息发送到特定的处理程序：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">echo core &gt; /proc/sys/kernel/core_pattern</span><br></pre></td></tr></table></figure></p>
+<p>官方文档：<a href="http://lcamtuf.coredump.cx/afl/README.txt" target="_blank" rel="noopener">http://lcamtuf.coredump.cx/afl/README.txt</a></p>
+<h2 id="测试示例"><a href="#测试示例" class="headerlink" title="测试示例"></a>测试示例</h2><p>对于有源码的测试程序，可以使用afl来代替gcc或clang来编译。用afl的插桩可以优化afl-fuzz的性能，加速fuzz。<br>一般的编译步骤如下：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">CC=/path/to/afl/afl-gcc ./configuer</span><br><span class="line">make clean all</span><br></pre></td></tr></table></figure></p>
+<p>C++程序则设置为:<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">CXX=/path/to/afl/afl-g++</span><br></pre></td></tr></table></figure></p>
+<p>下面是一个崩溃示例程序：<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;signal.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span> *argv[])</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line"> <span class="keyword">char</span> buf[<span class="number">233</span>] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line"> FILE *input = <span class="literal">NULL</span>;</span><br><span class="line"> input = fopen(argv[<span class="number">1</span>], <span class="string">"r"</span>);</span><br><span class="line"> <span class="keyword">if</span>(input != <span class="number">0</span>)</span><br><span class="line"> &#123;</span><br><span class="line">  <span class="built_in">fscanf</span>(input ,<span class="string">"%s"</span>, &amp;buf);</span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">"buf is %s\n"</span>, buf);</span><br><span class="line">  func(buf);</span><br><span class="line">  fclose(input);</span><br><span class="line"> &#125;</span><br><span class="line"> <span class="keyword">else</span></span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">"error!"</span>);</span><br><span class="line"></span><br><span class="line"> <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">func</span><span class="params">(<span class="keyword">char</span> *data)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line"> <span class="keyword">if</span>(data[<span class="number">0</span>] == <span class="string">'A'</span>)</span><br><span class="line">  raise(SIGSEGV);</span><br><span class="line"></span><br><span class="line"> <span class="keyword">else</span></span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">"ok\n"</span>);</span><br><span class="line"></span><br><span class="line"> <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>当输入文件的首字母为A时程序崩溃。</p>
+<ul>
+<li><p>用afl-gcc编译程序，插桩：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">./afl-gcc test.c -o test</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>测试<br>testcase是自带的输入目录，Testout是指定的输出目录</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">./afl-fuzz -i testcase -o Testout ./test @@</span><br></pre></td></tr></table></figure>
+</li>
+</ul>
+<p>这里使用@@标志，从文件中读取输入。在实际执行的时候会把@@替换成testcase下的测试样本。<br><img src="https://xzfile.aliyuncs.com/media/upload/picture/20180908154341-e7a1ab0c-b33a-1.png" alt=""><br>可以看到很快就出了一个crashe，在输出文件夹里我们可以看到使程序崩溃的输入文件：<br><img src="https://xzfile.aliyuncs.com/media/upload/picture/20180908154341-e7ad8008-b33a-1.png" alt=""><br>符合我们的程序崩溃逻辑。</p>
+<h1 id="Kernel-fuzz-–-syzkaller"><a href="#Kernel-fuzz-–-syzkaller" class="headerlink" title="Kernel fuzz – syzkaller"></a>Kernel fuzz – syzkaller</h1><p>syzkaller是一款无监督的覆盖引导内核模糊器。 Linux内核模糊测试支持最多，akaros，freebsd，fuchsia，netbsd，windows和gvisor都有不同程度的支持。<br>我们将用它来进行linux内核模糊测试。</p>
+<p>官方文档：<a href="https://github.com/google/syzkaller" target="_blank" rel="noopener">https://github.com/google/syzkaller</a></p>
+<h2 id="编译内核"><a href="#编译内核" class="headerlink" title="编译内核"></a>编译内核</h2><p>具体编译不再赘述(可看我这篇<a href="http://2456cc35.wiz03.com/share/s/0AlIMR0YIkmh2tjeP42sDMEN2cppy23AfkXs2--YCH1Y7_ne" target="_blank" rel="noopener">笔记</a>)，注意开启下面几个选项就行：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">CONFIG_KCOV=y</span><br><span class="line">CONFIG_DEBUG_INFO=y</span><br><span class="line">CONFIG_KASAN=y</span><br><span class="line">CONFIG_KASAN_INLINE=y</span><br></pre></td></tr></table></figure></p>
+<h2 id="安装Go语言编译器编译syzkaller，设置环境变量"><a href="#安装Go语言编译器编译syzkaller，设置环境变量" class="headerlink" title="安装Go语言编译器编译syzkaller，设置环境变量"></a>安装Go语言编译器编译syzkaller，设置环境变量</h2><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">wget https://storage.googleapis.com/golang/go1.8.1.linux-amd64.tar.gz</span><br><span class="line">tar -xf go1.8.1.linux-amd64.tar.gz</span><br><span class="line">mv go goroot</span><br><span class="line">export GOROOT=`pwd`/goroot</span><br><span class="line">export PATH=$GOROOT/bin:$PATH</span><br><span class="line">mkdir gopath</span><br><span class="line">export GOPATH=`pwd`/gopath</span><br></pre></td></tr></table></figure>
+<h2 id="安装syzkaller"><a href="#安装syzkaller" class="headerlink" title="安装syzkaller"></a>安装syzkaller</h2><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">go get -u -d github.com/google/syzkaller/...</span><br><span class="line">cd gopath/src/github.com/google/syzkaller/</span><br><span class="line">mkdir workdir</span><br><span class="line">make</span><br></pre></td></tr></table></figure>
+<h2 id="用Debian-wheezy制作一个镜像"><a href="#用Debian-wheezy制作一个镜像" class="headerlink" title="用Debian-wheezy制作一个镜像"></a>用Debian-wheezy制作一个镜像</h2><p>安装debootstrap：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo apt-get install debootstrap</span><br></pre></td></tr></table></figure></p>
+<p>用下面的脚本制作镜像：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">cd gopath/src/github.com/google/syzkaller/tools/</span><br><span class="line">./create-image.sh</span><br></pre></td></tr></table></figure></p>
+<p>然后是漫长的等待……成功后会在当前目录下看到ssh公钥和私钥文件，以及我们需要的镜像：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">wheezy.id_rsa</span><br><span class="line">wheezy.id_rsa.pub</span><br><span class="line">wheezy.img</span><br></pre></td></tr></table></figure></p>
+<h2 id="qemu启动"><a href="#qemu启动" class="headerlink" title="qemu启动"></a>qemu启动</h2><p>设置环境变量：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">export KERNEL=/home/edvison/linux-kernel</span><br><span class="line">export IMG=/home/edvison/gopath/src/github.com/google/syzkaller/tools</span><br></pre></td></tr></table></figure></p>
+<p>启动脚本：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">qemu-system-x86_64 \</span><br><span class="line">  -kernel $KERNEL/arch/x86_64/boot/bzImage \</span><br><span class="line">  -append &quot;console=ttyS0 root=/dev/sda debug earlyprintk=serial slub_debug=QUZ&quot;\</span><br><span class="line">  -hda $IMG/wheezy.img \</span><br><span class="line">  -net user,hostfwd=tcp::10021-:22 -net nic  --nographic \</span><br><span class="line">  -enable-kvm \</span><br><span class="line">  -m 2G \</span><br><span class="line">  -smp 2 \</span><br><span class="line">  -pidfile vm.pid \</span><br><span class="line">  2&gt;&amp;1 | tee vm.log</span><br></pre></td></tr></table></figure></p>
+<p>带有ssh服务的qemu虚拟机就配置好了：<br><img src="https://xzfile.aliyuncs.com/media/upload/picture/20180908154341-e7bcbde8-b33a-1.png" alt=""><br>要结束当前的qemu实例用下面命令：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo kill $(cat vm.pid)</span><br></pre></td></tr></table></figure></p>
+<h2 id="配置无密码登录ssh"><a href="#配置无密码登录ssh" class="headerlink" title="配置无密码登录ssh"></a>配置无密码登录ssh</h2><p>官方那个ssh登录设置有点迷…用下面的方法好了。<br>用<code>ssh-keygen -t rsa</code>命令在本机生成私钥id_rsa和公钥id_rsa.pub。然后把公钥id_rsa.pub复制到虚拟机上。<br>修改虚拟机上ssh的配置：/etc/ssh/sshd_config<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">PermitRootLogin without-password</span><br><span class="line"></span><br><span class="line">RSAAuthentication yes</span><br><span class="line">PubkeyAuthentication yes</span><br><span class="line">AuthorizedKeysFile	/root/.ssh/id_rsa.pub</span><br><span class="line"></span><br><span class="line">RhostsRSAAuthentication yes</span><br><span class="line">PermitEmptyPasswords no</span><br><span class="line">PasswordAuthentication no</span><br><span class="line"></span><br><span class="line">UsePAM no</span><br></pre></td></tr></table></figure></p>
+<p>重启ssh服务：<code>/etc/init.d/ssh restart</code></p>
+<p>然后在本机上运行下面命令就能无密码登录ssh：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ssh -p 10021 -i id_rsa root@127.0.0.1</span><br></pre></td></tr></table></figure></p>
+<h2 id="把syzkaller二进制文件复制到虚拟机中"><a href="#把syzkaller二进制文件复制到虚拟机中" class="headerlink" title="把syzkaller二进制文件复制到虚拟机中"></a>把syzkaller二进制文件复制到虚拟机中</h2><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">scp -P 10021 -i id_rsa -r $(GOPATH)/bin root@127.0.0.1</span><br></pre></td></tr></table></figure>
+<p>报错：<br><img src="https://xzfile.aliyuncs.com/media/upload/picture/20180908154341-e7c884f2-b33a-1.png" alt=""><br>搜了一下，发现是dropbear的key格式和openssh不同，要用dropbearconvert转换一下：<br>安装：<code>sudo apt install dropbear</code><br>使用方法：<br><img src="https://xzfile.aliyuncs.com/media/upload/picture/20180908154341-e7d7bc7e-b33a-1.png" alt=""><br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ dropbearconvert openssh dropbear id_rsa id_rsa_dropbear</span><br></pre></td></tr></table></figure></p>
+<p>然后就可以用转换过的私钥来连接传输文件了：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">scp -P 10021 -i id_rsa_dropbear -r $(GOPATH)/bin root@127.0.0.1</span><br></pre></td></tr></table></figure></p>
+<h2 id="启动syzkaller"><a href="#启动syzkaller" class="headerlink" title="启动syzkaller"></a>启动syzkaller</h2><p>编辑配置文件my.cfg：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">&#123;</span><br><span class="line"> &quot;target&quot;: &quot;linux/amd64&quot;,</span><br><span class="line"> &quot;http&quot;: &quot;127.0.0.1:10233&quot;,</span><br><span class="line"> &quot;workdir&quot;: &quot;$GOPATH/src/github.com/google/syzkaller/workdir&quot;,</span><br><span class="line"> &quot;kernel_obj&quot;: &quot;$KERNEL&quot;,</span><br><span class="line"> &quot;image&quot;: &quot;$IMG/wheezy.img&quot;,</span><br><span class="line"> &quot;sshkey&quot;: &quot;$GOPATH/src/github.com/google/syzkaller/workdir/id_rsa_dropbear&quot;,</span><br><span class="line"> &quot;syzkaller&quot;: &quot;$GOPATH/src/github.com/google/syzkaller&quot;,</span><br><span class="line"> &quot;procs&quot;: 4,</span><br><span class="line"> &quot;type&quot;: &quot;qemu&quot;,</span><br><span class="line"> &quot;vm&quot;: &#123;</span><br><span class="line">  &quot;count&quot;: 4,</span><br><span class="line">  &quot;kernel&quot;: &quot;$KERNEL/arch/x86_64/boot/bzImage&quot;,</span><br><span class="line">  &quot;cpu&quot;: 2,</span><br><span class="line">  &quot;mem&quot;: 2048</span><br><span class="line"> &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>运行：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">./bin/syz-manager -config=my.cfg</span><br></pre></td></tr></table></figure></p>
+<p>之后打开浏览器输入127.0.0.1:10233就能看到一个包括系统调用的覆盖量，syzkaller生成的程序数量,内核被crash的日志报告等的调试信息。</p>
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">GETAGGT IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/fuzz/">fuzz</a> <a class="tag tag--primary tag--small t-link" href="/tags/linux/">linux</a> <a class="tag tag--primary tag--small t-link" href="/tags/内核/">内核</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--disabled">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/09/08/Windows利用技巧：利用任意对象目录创建进行本地提权/" data-tooltip="Windows利用技巧：利用任意对象目录创建进行本地提权" aria-label="NÄCHSTER: Windows利用技巧：利用任意对象目录创建进行本地提权">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/09/08/linux下fuzz初试/" title="Teilen auf Facebook">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/09/08/linux下fuzz初试/" title="Teilen auf Twitter">
+                    <i class="fa fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/09/08/linux下fuzz初试/" title="Teilen auf Google Plus">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2018 Edvison. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="5">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--disabled">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/09/08/Windows利用技巧：利用任意对象目录创建进行本地提权/" data-tooltip="Windows利用技巧：利用任意对象目录创建进行本地提权" aria-label="NÄCHSTER: Windows利用技巧：利用任意对象目录创建进行本地提权">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/09/08/linux下fuzz初试/" title="Teilen auf Facebook">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/09/08/linux下fuzz初试/" title="Teilen auf Twitter">
+                    <i class="fa fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/09/08/linux下fuzz初试/" title="Teilen auf Google Plus">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                <div id="share-options-bar" class="share-options-bar" data-behavior="5">
+    <i id="btn-close-shareoptions" class="fa fa-close"></i>
+    <ul class="share-options">
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/09/08/linux下fuzz初试/">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Teilen auf Facebook</span>
+                </a>
+            </li>
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/09/08/linux下fuzz初试/">
+                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Teilen auf Twitter</span>
+                </a>
+            </li>
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/09/08/linux下fuzz初试/">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Teilen auf Google Plus</span>
+                </a>
+            </li>
+        
+    </ul>
+</div>
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-remove"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+        
+            <h4 id="about-card-name">Edvison</h4>
+        
+            <div id="about-card-bio"><p>Just the way you are</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>二进制、逆向</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover-v1.2.0.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/jquery.js"></script>
+<script src="/assets/js/jquery.fancybox.js"></script>
+<script src="/assets/js/thumbs.js"></script>
+<script src="/assets/js/tranquilpeak.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script src="/live2dw/lib/L2Dwidget.min.js?0c58a1486de42ac6cc1c59c7d98ae887"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","model":{"jsonPath":"/live2dw/assets/wanko.model.json"},"display":{"position":"right","width":100,"height":200},"mobile":{"show":true}});</script></body>
+</html>

@@ -117,7 +117,7 @@
                 href="#about">
         
         
-            <img class="header-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
+            <img class="header-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
         
         </a>
     
@@ -135,7 +135,7 @@
         
             <div class="sidebar-profile">
                 <a href="/#about">
-                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
+                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
                 </a>
                 <h4 class="sidebar-profile-name">Edvison</h4>
                 
@@ -240,10 +240,10 @@
             
                 <li class="sidebar-button">
                     
-                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="Mail">
+                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="E-Mail">
                     
                         <i class="sidebar-button-icon fa fa-lg fa-envelope-o" aria-hidden="true"></i>
-                        <span class="sidebar-button-desc">Mail</span>
+                        <span class="sidebar-button-desc">E-Mail</span>
                     </a>
             </li>
             
@@ -288,7 +288,7 @@
         <div class="post-meta">
     <time datetime="2017-11-05T17:00:28+08:00">
 	
-		    Nov 05, 2017
+		    05 Nov 2017
     	
     </time>
     
@@ -308,7 +308,7 @@
         <div class="main-content-wrap">
             <p>pwnable.kr第一区的题的write up整理在这：</p>
 <a id="more"></a>
-<h1 id="table-of-contents">Table of Contents</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#fd"><span class="toc-text">fd</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#col"><span class="toc-text">col</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#bof"><span class="toc-text">bof</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#upx"><span class="toc-text">upx</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#passcode"><span class="toc-text">passcode</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#mistake"><span class="toc-text">mistake</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#shellshock"><span class="toc-text">shellshock</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#random"><span class="toc-text">random</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#leg"><span class="toc-text">leg</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#cmd1"><span class="toc-text">cmd1</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#cmd2"><span class="toc-text">cmd2</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#UAF"><span class="toc-text">UAF</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#blackjack"><span class="toc-text">blackjack</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#asm"><span class="toc-text">asm</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#unlink"><span class="toc-text">unlink</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#memcpy"><span class="toc-text">memcpy</span></a></li></ol>
+<h1 id="table-of-contents">Inhaltsverzeichnis</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#fd"><span class="toc-text">fd</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#col"><span class="toc-text">col</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#bof"><span class="toc-text">bof</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#upx"><span class="toc-text">upx</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#passcode"><span class="toc-text">passcode</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#mistake"><span class="toc-text">mistake</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#shellshock"><span class="toc-text">shellshock</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#random"><span class="toc-text">random</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#leg"><span class="toc-text">leg</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#cmd1"><span class="toc-text">cmd1</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#cmd2"><span class="toc-text">cmd2</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#UAF"><span class="toc-text">UAF</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#blackjack"><span class="toc-text">blackjack</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#asm"><span class="toc-text">asm</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#unlink"><span class="toc-text">unlink</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#memcpy"><span class="toc-text">memcpy</span></a></li></ol>
 <h2 id="fd"><a href="#fd" class="headerlink" title="fd"></a>fd</h2><p><img src="20024023.png" alt="20024023.png"><br>看一下fd.c:<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="keyword">char</span> buf[<span class="number">32</span>];</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span>* argv[], <span class="keyword">char</span>* envp[])</span></span>&#123;</span><br><span class="line">	<span class="keyword">if</span>(argc&lt;<span class="number">2</span>)&#123;</span><br><span class="line">		<span class="built_in">printf</span>(<span class="string">"pass argv[1] a number\n"</span>);  <span class="comment">//输入一个命令行参数</span></span><br><span class="line">		<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">int</span> fd = atoi( argv[<span class="number">1</span>] ) - <span class="number">0x1234</span>;     <span class="comment">//  0x1234  &gt;&gt;  4660</span></span><br><span class="line">	<span class="keyword">int</span> len = <span class="number">0</span>;</span><br><span class="line">	len = read(fd, buf, <span class="number">32</span>);</span><br><span class="line">	<span class="keyword">if</span>(!<span class="built_in">strcmp</span>(<span class="string">"LETMEWIN\n"</span>, buf))&#123;        <span class="comment">//字符串比较</span></span><br><span class="line">		<span class="built_in">printf</span>(<span class="string">"good job :)\n"</span>);</span><br><span class="line">		system(<span class="string">"/bin/cat flag"</span>);</span><br><span class="line">		<span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="built_in">printf</span>(<span class="string">"learn about Linux file IO\n"</span>);</span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
 <p><img src="20146905.png" alt="20146905.png"></p>
 <h2 id="col"><a href="#col" class="headerlink" title="col"></a>col</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="keyword">unsigned</span> <span class="keyword">long</span> hashcode = <span class="number">0x21DD09EC</span>;      <span class="comment">//key</span></span><br><span class="line"><span class="function"><span class="keyword">unsigned</span> <span class="keyword">long</span> <span class="title">check_password</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span>* p)</span></span>&#123;</span><br><span class="line">	<span class="keyword">int</span>* ip = (<span class="keyword">int</span>*)p;</span><br><span class="line">	<span class="keyword">int</span> i;</span><br><span class="line">	<span class="keyword">int</span> res=<span class="number">0</span>;</span><br><span class="line">	<span class="keyword">for</span>(i=<span class="number">0</span>; i&lt;<span class="number">5</span>; i++)&#123;</span><br><span class="line">		res += ip[i];</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> res;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">(<span class="keyword">int</span> argc, <span class="keyword">char</span>* argv[])</span></span>&#123;</span><br><span class="line">	<span class="keyword">if</span>(argc&lt;<span class="number">2</span>)&#123;</span><br><span class="line">		<span class="built_in">printf</span>(<span class="string">"usage : %s [passcode]\n"</span>, argv[<span class="number">0</span>]);</span><br><span class="line">		<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">if</span>(<span class="built_in">strlen</span>(argv[<span class="number">1</span>]) != <span class="number">20</span>)&#123;</span><br><span class="line">		<span class="built_in">printf</span>(<span class="string">"passcode length should be 20 bytes\n"</span>); </span><br><span class="line"> <span class="comment">/* 参数字符串长度为20个字符 */</span></span><br><span class="line">		<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span>(hashcode == check_password( argv[<span class="number">1</span>] ))&#123;  </span><br><span class="line">		system(<span class="string">"/bin/cat flag"</span>);      </span><br><span class="line"> <span class="comment">/* 如果累加和相等就能够执行对应的命令，输出flag */</span></span><br><span class="line">		<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">else</span></span><br><span class="line">		<span class="built_in">printf</span>(<span class="string">"wrong passcode.\n"</span>);</span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
@@ -413,7 +413,7 @@
     <div id="post-footer" class="post-footer main-content-wrap">
         
             <div class="post-footer-tags">
-                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                <span class="text-color-light text-small">GETAGGT IN</span><br/>
                 
     <a class="tag tag--primary tag--small t-link" href="/tags/pwn/">pwn</a> <a class="tag tag--primary tag--small t-link" href="/tags/writeup/">writeup</a>
 
@@ -426,18 +426,18 @@
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/02/14/shellcode编写/" data-tooltip="shellcode编写" aria-label="PREVIOUS: shellcode编写">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/02/14/shellcode编写/" data-tooltip="shellcode编写" aria-label="FRÜHER: shellcode编写">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
-                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
                 </a>
             </li>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2017/10/12/jarvisoj/" data-tooltip="Jarvis OJ pwn write up" aria-label="NEXT: Jarvis OJ pwn write up">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2017/10/12/jarvisoj/" data-tooltip="Jarvis OJ pwn write up" aria-label="NÄCHSTER: Jarvis OJ pwn write up">
                 
-                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
                 </a>
             </li>
@@ -445,7 +445,7 @@
     </nav>
     <ul class="post-actions post-action-share">
         <li class="post-action hide-lg hide-md hide-sm">
-            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
                 <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
         </li>
@@ -453,7 +453,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2017/11/05/pwnable_1/" title="Share on Facebook">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2017/11/05/pwnable_1/" title="Teilen auf Facebook">
                     <i class="fa fa-facebook-official" aria-hidden="true"></i>
                 </a>
             </li>
@@ -461,7 +461,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2017/11/05/pwnable_1/" title="Share on Twitter">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2017/11/05/pwnable_1/" title="Teilen auf Twitter">
                     <i class="fa fa-twitter" aria-hidden="true"></i>
                 </a>
             </li>
@@ -469,7 +469,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2017/11/05/pwnable_1/" title="Share on Google+">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2017/11/05/pwnable_1/" title="Teilen auf Google Plus">
                     <i class="fa fa-google-plus" aria-hidden="true"></i>
                 </a>
             </li>
@@ -479,7 +479,7 @@
         
         <li class="post-action">
             
-                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
             
                 <i class="fa fa-list" aria-hidden="true"></i>
             </a>
@@ -512,18 +512,18 @@
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/02/14/shellcode编写/" data-tooltip="shellcode编写" aria-label="PREVIOUS: shellcode编写">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/02/14/shellcode编写/" data-tooltip="shellcode编写" aria-label="FRÜHER: shellcode编写">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
-                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
                 </a>
             </li>
             <li class="post-action">
                 
                     
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2017/10/12/jarvisoj/" data-tooltip="Jarvis OJ pwn write up" aria-label="NEXT: Jarvis OJ pwn write up">
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2017/10/12/jarvisoj/" data-tooltip="Jarvis OJ pwn write up" aria-label="NÄCHSTER: Jarvis OJ pwn write up">
                 
-                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
                     <i class="fa fa-angle-right" aria-hidden="true"></i>
                 </a>
             </li>
@@ -531,7 +531,7 @@
     </nav>
     <ul class="post-actions post-action-share">
         <li class="post-action hide-lg hide-md hide-sm">
-            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
                 <i class="fa fa-share-alt" aria-hidden="true"></i>
             </a>
         </li>
@@ -539,7 +539,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2017/11/05/pwnable_1/" title="Share on Facebook">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2017/11/05/pwnable_1/" title="Teilen auf Facebook">
                     <i class="fa fa-facebook-official" aria-hidden="true"></i>
                 </a>
             </li>
@@ -547,7 +547,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2017/11/05/pwnable_1/" title="Share on Twitter">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2017/11/05/pwnable_1/" title="Teilen auf Twitter">
                     <i class="fa fa-twitter" aria-hidden="true"></i>
                 </a>
             </li>
@@ -555,7 +555,7 @@
             
             
             <li class="post-action hide-xs">
-                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2017/11/05/pwnable_1/" title="Share on Google+">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2017/11/05/pwnable_1/" title="Teilen auf Google Plus">
                     <i class="fa fa-google-plus" aria-hidden="true"></i>
                 </a>
             </li>
@@ -565,7 +565,7 @@
         
         <li class="post-action">
             
-                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
             
                 <i class="fa fa-list" aria-hidden="true"></i>
             </a>
@@ -583,7 +583,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2017/11/05/pwnable_1/">
-                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Share on Facebook</span>
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Teilen auf Facebook</span>
                 </a>
             </li>
         
@@ -591,7 +591,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2017/11/05/pwnable_1/">
-                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
+                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Teilen auf Twitter</span>
                 </a>
             </li>
         
@@ -599,7 +599,7 @@
             
             <li class="share-option">
                 <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2017/11/05/pwnable_1/">
-                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
+                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Teilen auf Google Plus</span>
                 </a>
             </li>
         
@@ -621,7 +621,7 @@
             <i class="fa fa-remove"></i>
         </div>
         
-            <img id="about-card-picture" src="/assets/images/1.png" alt="Author&#39;s picture"/>
+            <img id="about-card-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
         
             <h4 id="about-card-name">Edvison</h4>
         

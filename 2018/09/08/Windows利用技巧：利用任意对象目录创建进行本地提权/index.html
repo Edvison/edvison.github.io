@@ -1,0 +1,550 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hans">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Edvison&#39;s blog">
+    <title>Windows利用技巧：利用任意对象目录创建进行本地提权 - Edvison&#39;s blog</title>
+    <meta name="author" content="Edvison">
+    
+    
+        <link rel="icon" href="http://edvison.cn/assets/images/favicon.ico">
+    
+    
+        <link rel="alternate" type="application/atom+xml" title="RSS" href="/atom.xml">
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Edvison","sameAs":["https://github.com/edvison","mailto:edvisonmail@163.com"],"image":"1.png"},"articleBody":"本文是Windows Exploitation Tricks: Exploiting Arbitrary Object Directory Creation for Local Elevation of Privilege的翻译文章。\n\n\n前言我们又回到了关于Windows利用技巧系列。 这次我将详细说明我将如何利用问题1550，它能使用CSRSS特权进程的某些行为创建任意对象目录。 我将再次说明如何利用特定漏洞，我希望读者能够更好地了解Windows操作系统的复杂性，并向微软提供有关非内存损坏利用技术的信息，以便他们能够以某种方式缓解这些漏洞。\n漏洞概述对象管理器目录与普通文件目录无关。 使用一组单独的系统调用（如NtCreateDirectoryObject而不是NtCreateFile）创建和操作目录。 即使它们不是文件目录，也很容易受到许多和你在文件系统上发现的相同类别问题的影响，包括特权创建和符号链接劫持攻击。\n问题1550中的漏洞允许在用SYSTEM权限运行时在用户可控制的位置内创建目录。 该bug的根源在于Desktop Bridge应用程序的创建。 AppInfo服务负责创建新应用，调用未记录的API，CreateAppContainerToken来执行一些内部管理。 不幸的是，此API在用户的AppContainerNamedObjects对象目录下创建对象目录，以支持OS重定向BaseNamedObjects和RPC端点。\n由于在不模拟用户的情况下调用API（在CreateProcess中调用它一般不是个大问题），因此使用服务的标识（即SYSTEM）创建对象目录。 由于用户可以将任意对象写入其AppContainerNamedObjects目录，所以他们可以删除对象管理器符号链接，并将创建的目录重定向到对象管理器命名空间中的任何位置。 该目录是使用显式安全描述符创建的，该描述符允许用户完全访问，这对于利用来说将变得非常重要。\n利用此漏洞的一个难点是，如果未在AppContainerNamedObjects下创建对象目录，但我们已经重定向其位置，那么执行令牌创建并在其操作过程中捕获目录句柄的基础NtCreateLowBoxToken系统调用将失败。 可以创建目录，但很快就会被删除。 这种行为实际上是我报告的早期问题，它改变了系统调用的行为。这仍然可以通过在删除之前打开创建目录的句柄来实现，并且在实践中，只要你的系统具有多个处理器（基本上是任何现代系统），它几乎都能成功。要打开句柄，只需利用该目录，该目录就会保持活动状态。\n这是我发送给MSRC的原始PoC停止的点，所有PoC都创建了一个任意对象目录。 你可以在问题跟踪器中找到此PoC附加到初始错误报告。 现在让我们深入了解如何利用此漏洞从普通用户提权得到特权SYSTEM用户。\n利用利用的主要问题是找个位置，并在里面创建一个对象目录，然后利用该目录来提升我们的权限。 事实证明这比你想象的要难。 虽然几乎所有Windows应用程序都使用底层的对象目录，例如BaseNamedObjects，但应用程序通常会与漏洞无法用于修改的现有目录进行交互。\n本利用的对象目录是KnownDlls（我在本系列的前一篇博客中简要提到过）。 此对象目录包含NAME.DLL形式的命名图像节对象列表。 当程序在SYSTEM32目录内的DLL上调用LoadLibrary时，加载程序会先检查KnownDlls对象目录中是否存在现有镜像节，如果该节存在则将加载而不是创建新的部分对象。\nKnownDll只能由管理员写入（严格来说我们不会看到），因此如果你能删除此目录中的任意节对象，那么也能强制系统服务加载指定的DLL，例如使用Diagnostics Hub服务 我在上一篇博文中描述过，它会映射节，而不是磁盘上的文件。 但是，除了添加一个无助于利用的新子目录之外，该漏洞不能用于修改KnownDlls对象目录。 也许我们可以通过利用漏洞使用的其他功能来间接定位KnownDlls？\n每当我研究产品的特定部分时，我总会记下有趣或意外的行为。在我研究Windows符号链接时发现了一个有趣的例：Win32 API支持名为DefineDosDevice的函数，此API的目的是允许用户定义新的DOS驱动器号。 API需要三个参数，一组标志，要创建的驱动器前缀（例如X :)和映射该驱动器的目标设备。 API的主要用途和CMD的SUBST命令相似。\n在现代版本的Windows上，此API在用户自己的DOS设备对象目录中创建一个对象管理器符号链接，该位置可由普通的低权限用户帐户写入。 但是，如果你看一下DefineDosDevice的实现，你会发现它没有在调用者的进程中实现。 相反，该实现在当前会话的CSRSS服务中调用RPC方法，特别是BASESRV.DLL中的BaseSrvDefineDosDevice方法。 调用特权服务的主要原因是它允许用户创建永久符号链接，当符号链接对象的所有句柄都关闭时，该链接不会被删除。 通常，要创建永久命名的内核对象，你需要SeCreatePermanentPrivilege权限，但普通用户没有该权限。 另一方面CSRSS会这样做，通过调用该服务，我们可以创建永久符号链接。\n创建永久符号链接的能力当然很有趣，但如果我们仅限于在用户的DOS设备目录中创建驱动器号，那它也不是特别有用。 我还注意到，实现从未验证lpDeviceName参数是否为驱动器号。 例如，你可以指定名称“GLOBALROOT\\RPC Control\\ABC”，它实际上会在用户的DosDevices目录之外创建一个符号链接，特别是在这种情况下，路径为“\\RPC Control\\ABC”。 因为实现将DosDevice的前缀“\\??”添加到设备名称并将其传递给NtCreateSymbolicLink。内核将遵循完整路径，找到GLOBALROOT，它是返回根的特殊符号链接，然后按照创建任意对象的路径。 目前还不清楚这是否是固定行为，所以我更深入地研究了CSRSS的实施情况，CSRSS的缩写形式如下所示。1234567891011121314151617181920212223242526272829303132333435363738394041424344454647484950515253NTSTATUS BaseSrvDefineDosDevice(DWORD dwFlags,                               LPCWSTR lpDeviceName,                               LPCWSTR lpTargetPath) &#123;   WCHAR device_name[];   snwprintf_s(device_name, L&quot;\\\\??\\\\%s&quot;, lpDeviceName);   UNICODE_STRING device_name_ustr;   OBJECT_ATTRIBUTES objattr;   RtlInitUnicodeString(&amp;device_name_ustr, device_name);   InitializeObjectAttributes(&amp;objattr, &amp;device_name_ustr,                              OBJ_CASE_INSENSITIVE);   BOOLEAN enable_impersonation = TRUE;   CsrImpersonateClient();   HANDLE handle;   NTSTATUS status = NtOpenSymbolicLinkObject(&amp;handle, DELETE, &amp;objattr);①   CsrRevertToSelf();   if (NT_SUCCESS(status)) &#123;       BOOLEAN is_global = FALSE;       // Check if we opened a global symbolic link.       IsGlobalSymbolicLink(handle, &amp;is_global); ②       if (is_global) &#123;           enable_impersonation = FALSE; ③           snwprintf_s(device_name, L&quot;\\\\GLOBAL??\\\\%s&quot;, lpDeviceName);           RtlInitUnicodeString(&amp;device_name_ustr, device_name);       &#125;       // Delete the existing symbolic link.       NtMakeTemporaryObject(handle);       NtClose(handle);   &#125;   if (enable_impersonation) &#123; ④       CsrRevertToSelf();   &#125;   // Create the symbolic link.   UNICODE_STRING target_name_ustr;   RtlInitUnicodeString(&amp;target_name_ustr, lpTargetPath);   status = NtCreateSymbolicLinkObject(&amp;handle, MAXIMUM_ALLOWED,                               objattr, target_name_ustr); ⑤   if (enable_impersonation) &#123; ⑥       CsrRevertToSelf();   &#125;   if (NT_SUCCESS(status)) &#123;       status = NtMakePermanentObject(handle); ⑦       NtClose(handle);   &#125;   return status;&#125;\n我们可以看到代码所做的第一件事就是构建设备名路径，然后尝试打开DELETE访问①的符号链接对象。 这是因为API支持重新定义现有的符号链接，因此必须先尝试删除旧链接。如果我们遵循链接不存在的默认路径，我们将看到代码模拟调用者（在这种情况下为低权限用户）④，然后创建符号链接对象⑤，恢复模拟⑥并在返回操作状态之前使对象永久化⑦。 没有什么太令人惊讶的，至于为什么我们可以创建任意符号链接，是因为所有代码都是在传递的设备名称前加上“\\??”。 由于代码在执行任何重要操作时模拟调用者，因此我们只能在用户可以写入的位置创建链接。\n更有趣的是中间条件，其中为DELETE访问打开目标符号链接，这是调用NtMakeTemporaryObject所必需的。 打开的句柄传递给另一个函数②，IsGlobalSymbolicLink，并根据该函数的结果设置禁用模拟的标志，然后使用全局DOS设备位置\\GLOBAL再次重新创建设备名称？ 对于前缀③，什么是IsGlobalSymbolicLink呢？ 我们再一次可以重新启动该功能并进行检查。12345678void IsGlobalSymbolicLink(HANDLE handle, BOOLEAN* is_global) &#123;   BYTE buffer[0x1000];   NtQueryObject(handle, ObjectNameInformation, buffer, sizeof(buffer));   UNICODE_STRING prefix;   RtlInitUnicodeString(&amp;prefix, L&quot;\\\\GLOBAL??\\\\&quot;);   // Check if object name starts with \\GLOBAL??    *is_global = RtlPrefixUnicodeString(&amp;prefix, (PUNICODE_STRING)buffer);&#125;\n此代码会检查打开的对象的名称是否以\\GLOBAL ??\\开头。如果是，它将is_global标志设置为TRUE。使该标志模拟被清除并设备名称被重写。这意味着如果调用者具有对全局DOS设备目录内的符号链接的DELETE访问权限，则将重新创建符号链接而不进行任何模拟，也就是它会被创建为SYSTEM用户。这并不是很有趣，因为默认情况下只有管理员可以打开DELETE访问的全局符号链接之一。但是，如果我们能在全局DOS设备目录下创建一个可由低权限用户写入的子目录，该怎么办？可以打开该目录中的任何符号链接以进行DELETE访问，因为低权限用户可以指定他们喜欢的任何访问权限，代码会将链接标记为全局，而实际情况并非如此，禁用模拟并将其重新创建为SYSTEM 。猜猜看，我们有一个漏洞可以让我们在全局DOS设备目录下创建一个任意对象目录。\n如果不是为了重写路径，这并不是非常可利用的。 我们可以利用路径“\\??\\ABC”与“\\GLOBAL ??\\ABC”不同的特点，以构造在对象管理器命名空间中作为SYSTEM创建任意符号链接的机制。 这对我们有什么帮助？ 如果你编写了一个指向KnownDlls的符号链接，那么在打开DLL加载程序请求的部分时，内核将会跟随它。 因此，即使我们无法在KnownDlls中直接创建新的节对象，我们也可以创建一个符号链接，该链接指向该目录之外的低权限用户可以创建节对象的位置。 我们现在可以利用劫持将任意DLL加载到特权进程内的内存中，并实现提权。\n把这些全总结在一起，我们可以使用下面的步骤来利用漏洞：\n\n使用此漏洞创建目录“\\GLOBAL ??\\KnownDlls”\n在新目录中创建一个符号链接，其中包含要劫持的DLL的名称，例如TAPI32.DLL。 此链接的目标无关紧要。\n在用户的DOS设备目录中创建一个名为“GLOBALROOT”的新符号链接，指向“\\GLOBAL ??”。 当调用者通过用户的DOS设备目录访问它时，将覆盖真正的GLOBALROOT符号链接对象。\n调用DefineDosDevice，指定设备名称“GLOBALROOT\\KnownDlls\\TAPI32.DLL”以及用户可以在其中创建节对象的位置的目标路径。 这将导致以下情况： a. CSRSS打开符号链接“\\??\\GLOBALROOT\\KnownDlls\\TAPI32.DLL”，然后打开“\\GLOBAL ??\\KnownDlls\\TAPI32.DLL”。 由于这是由用户控制的，所以能成功打开，并且该链接被视为全局，禁用模拟。 b. CSRSS将路径重写为“\\GLOBAL ??\\GLOBALROOT\\KnownDlls\\TAPI32.DLL”，然后调用NtCreateSymbolicLinkObject而不进行模拟。 这使得之后真正的GLOBALROOT被链接，并创建具有任意目标路径的符号链接“\\KnownDlls\\TAPI32.DLL”。\n在目标位置为任意DLL创建映像节对象，然后通过获取服务来使用TAPI32.DLL的路径调用LoadLibrary，强制将其加载到特权服务（如诊断中心）中。\n实现提权\n\n这实际上是第二次使用DefineDosDevice API进行利用，它是Protected Process Light （PPL）旁路管理员。 PPL进程仍然使用KnownDlls，因此如果你能添加新条目，那么也可以将代码注入受保护进程。 为了防止该定向攻击，Windows使用进程信任标签标记KnownDlls目录，该进程信任标签阻止除最高级别PPL进程以外的所有进程写入，如下所示。\n那么我们的漏洞利用如何运作？ CSRSS实际上作为最高级别的PPL运行，因此允许写入KnownDlls目录。 一旦模拟被删除，就能使用进程的身份，这样就能获取完全访问权限。\n如果你想测试这个漏洞我已经在这里将新的PoC附加到问题tracker。\n总结你可能想知道我是否向Node报告了DefineDosDevice的行为？ 我没有，主要是因为它本身并不是一个漏洞。 即使在PPL管理员的情况下，MSRC也不会考虑可用的安全边界（比如这个例子）。 当然，Windows开发人员可能会尝试在将来更改此行为，假设它不会导致兼容性的重大回归。 这个功能自Windows早期就已存在，至少从Windows XP开始，因此可能存在依赖它的东西。 通过详细描述这个漏洞，我想给MS提供尽可能多的信息，以便在将来解决这种开发技术。\n我确实向MSRC报告了这个漏洞，并在2018年6月的补丁中得到修复。 Microsoft如何修复此漏洞？ 开发人员添加了一个新的API，CreateAppContainerTokenForUser，它在创建新的AppContainer令牌期间模拟令牌。 通过在令牌创建期间模拟，代码可确保仅使用用户的权限创建所有对象。 由于它是一个新的API，因此必须更改现有代码才能使用它，因此你仍然可以在旧的CreateAppContainerToken的代码中找到可利用的漏洞。\n在利用任何平台上的漏洞时，有时也需要深入了解不同组件的交互方式。 在这种情况下，虽然最初的漏洞显然是一个安全问题，但目前尚不清楚如何进行全面利用。 在逆向工程中遇到的有趣行为的日志总是值得记录下来的，即使某些东西本身不是安全漏洞，但它有可能对利用另一个漏洞有用。\n","dateCreated":"2018-09-08T15:54:52+08:00","dateModified":"2018-09-08T15:55:19+08:00","datePublished":"2018-09-08T15:54:52+08:00","description":"本文是Windows Exploitation Tricks: Exploiting Arbitrary Object Directory Creation for Local Elevation of Privilege的翻译文章。","headline":"Windows利用技巧：利用任意对象目录创建进行本地提权","image":[],"mainEntityOfPage":{"@type":"WebPage","@id":"http://edvison.cn/2018/09/08/Windows利用技巧：利用任意对象目录创建进行本地提权/"},"publisher":{"@type":"Organization","name":"Edvison","sameAs":["https://github.com/edvison","mailto:edvisonmail@163.com"],"image":"1.png","logo":{"@type":"ImageObject","url":"1.png"}},"url":"http://edvison.cn/2018/09/08/Windows利用技巧：利用任意对象目录创建进行本地提权/","keywords":"windows"}</script>
+    <meta name="description" content="本文是Windows Exploitation Tricks: Exploiting Arbitrary Object Directory Creation for Local Elevation of Privilege的翻译文章。">
+<meta name="keywords" content="windows">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Windows利用技巧：利用任意对象目录创建进行本地提权">
+<meta property="og:url" content="http://edvison.cn/2018/09/08/Windows利用技巧：利用任意对象目录创建进行本地提权/index.html">
+<meta property="og:site_name" content="Edvison&#39;s blog">
+<meta property="og:description" content="本文是Windows Exploitation Tricks: Exploiting Arbitrary Object Directory Creation for Local Elevation of Privilege的翻译文章。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180831130827-e4fe45dc-acdb-1.png">
+<meta property="og:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180831130827-e517deca-acdb-1.png">
+<meta property="og:updated_time" content="2018-09-08T07:55:19.404Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Windows利用技巧：利用任意对象目录创建进行本地提权">
+<meta name="twitter:description" content="本文是Windows Exploitation Tricks: Exploiting Arbitrary Object Directory Creation for Local Elevation of Privilege的翻译文章。">
+<meta name="twitter:image" content="https://xzfile.aliyuncs.com/media/upload/picture/20180831130827-e4fe45dc-acdb-1.png">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://edvison.cn/assets/images/1.png"/>
+    
+    
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/font-awesome.css">
+    <link rel="stylesheet" href="/assets/css/jquery.fancybox.css">
+    <link rel="stylesheet" href="/assets/css/thumbs.css">
+    <link rel="stylesheet" href="/assets/css/tranquilpeak.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="5">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Edvison&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="5">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+                </a>
+                <h4 class="sidebar-profile-name">Edvison</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>Just the way you are</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link open-algolia-search"
+                             href="#search"
+                            
+                            title="search"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-search" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">search</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="about"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">about</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/edvison" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="mailto:edvisonmail@163.com" target="_blank" rel="noopener" title="E-Mail">
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-envelope-o" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">E-Mail</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/atom.xml"
+                            
+                            title="RSS"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-lg fa-rss" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">RSS</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+            <div id="main" data-behavior="5"
+                 class="
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+        <div class="post-header main-content-wrap text-left">
+    
+        <h1 class="post-title">
+            Windows利用技巧：利用任意对象目录创建进行本地提权
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2018-09-08T15:54:52+08:00">
+	
+		    08 Sep 2018
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/windows/">windows</a>
+
+
+    
+</div>
+
+    
+</div>
+
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>本文是<a href="https://googleprojectzero.blogspot.com/2018/08/windows-exploitation-tricks-exploiting.html" target="_blank" rel="noopener">Windows Exploitation Tricks: Exploiting Arbitrary Object Directory Creation for Local Elevation of Privilege</a>的翻译文章。</p>
+<a id="more"></a>
+<h1 id="table-of-contents">Inhaltsverzeichnis</h1><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#前言"><span class="toc-text">前言</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#漏洞概述"><span class="toc-text">漏洞概述</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#利用"><span class="toc-text">利用</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#总结"><span class="toc-text">总结</span></a></li></ol>
+<h1 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h1><p>我们又回到了关于Windows利用技巧系列。 这次我将详细说明我将如何利用问题<a href="https://bugs.chromium.org/p/project-zero/issues/detail?id=1550" target="_blank" rel="noopener">1550</a>，它能使用CSRSS特权进程的某些行为创建任意对象目录。 我将再次说明如何利用特定漏洞，我希望读者能够更好地了解Windows操作系统的复杂性，并向微软提供有关非内存损坏利用技术的信息，以便他们能够以某种方式缓解这些漏洞。</p>
+<h1 id="漏洞概述"><a href="#漏洞概述" class="headerlink" title="漏洞概述"></a>漏洞概述</h1><p>对象管理器目录与普通文件目录无关。 使用一组单独的系统调用（如NtCreateDirectoryObject而不是NtCreateFile）创建和操作目录。 即使它们不是文件目录，也很容易受到许多和你在文件系统上发现的相同类别问题的影响，包括特权创建和符号链接劫持攻击。</p>
+<p>问题<a href="https://bugs.chromium.org/p/project-zero/issues/detail?id=1550" target="_blank" rel="noopener">1550</a>中的漏洞允许在用SYSTEM权限运行时在用户可控制的位置内创建目录。 该bug的根源在于<a href="https://docs.microsoft.com/en-us/windows/uwp/porting/desktop-to-uwp-extensions" target="_blank" rel="noopener">Desktop Bridge</a>应用程序的创建。 AppInfo服务负责创建新应用，调用未记录的API，CreateAppContainerToken来执行一些内部管理。 不幸的是，此API在用户的AppContainerNamedObjects对象目录下创建对象目录，以支持OS重定向BaseNamedObjects和RPC端点。</p>
+<p>由于在不模拟用户的情况下调用API（在CreateProcess中调用它一般不是个大问题），因此使用服务的标识（即SYSTEM）创建对象目录。 由于用户可以将任意对象写入其AppContainerNamedObjects目录，所以他们可以删除对象管理器符号链接，并将创建的目录重定向到对象管理器命名空间中的任何位置。 该目录是使用显式安全描述符创建的，该描述符允许用户完全访问，这对于利用来说将变得非常重要。</p>
+<p>利用此漏洞的一个难点是，如果未在AppContainerNamedObjects下创建对象目录，但我们已经重定向其位置，那么执行令牌创建并在其操作过程中捕获目录句柄的基础NtCreateLowBoxToken系统调用将失败。 可以创建目录，但很快就会被删除。 这种行为实际上是我报告的早期<a href="https://docs.microsoft.com/en-us/windows/uwp/porting/desktop-to-uwp-extensions" target="_blank" rel="noopener">问题</a>，它改变了系统调用的行为。这仍然可以通过在删除之前打开创建目录的句柄来实现，并且在实践中，只要你的系统具有多个处理器（基本上是任何现代系统），它几乎都能成功。要打开句柄，只需利用该目录，该目录就会保持活动状态。</p>
+<p>这是我发送给MSRC的原始PoC停止的点，所有PoC都创建了一个任意对象目录。 你可以在问题跟踪器中找到此PoC附加到初始错误报告。 现在让我们深入了解如何利用此漏洞从普通用户提权得到特权SYSTEM用户。</p>
+<h1 id="利用"><a href="#利用" class="headerlink" title="利用"></a>利用</h1><p>利用的主要问题是找个位置，并在里面创建一个对象目录，然后利用该目录来提升我们的权限。 事实证明这比你想象的要难。 虽然几乎所有Windows应用程序都使用底层的对象目录，例如BaseNamedObjects，但应用程序通常会与漏洞无法用于修改的现有目录进行交互。</p>
+<p>本利用的对象目录是KnownDlls（我在本系列的前一篇<a href="https://xz.aliyun.com/t/2670" target="_blank" rel="noopener">博客</a>中简要提到过）。 此对象目录包含NAME.DLL形式的命名图像节对象列表。 当程序在SYSTEM32目录内的DLL上调用LoadLibrary时，加载程序会先检查KnownDlls对象目录中是否存在现有镜像节，如果该节存在则将加载而不是创建新的部分对象。<br><img src="https://xzfile.aliyuncs.com/media/upload/picture/20180831130827-e4fe45dc-acdb-1.png" alt=""></p>
+<p>KnownDll只能由管理员写入（严格来说我们不会看到），因此如果你能删除此目录中的任意节对象，那么也能强制系统服务加载指定的DLL，例如使用Diagnostics Hub服务 我在上一篇博文中描述过，它会映射节，而不是磁盘上的文件。 但是，除了添加一个无助于利用的新子目录之外，该漏洞不能用于修改KnownDlls对象目录。 也许我们可以通过利用漏洞使用的其他功能来间接定位KnownDlls？</p>
+<p>每当我研究产品的特定部分时，我总会记下有趣或意外的行为。在我研究Windows符号链接时发现了一个有趣的例：Win32 API支持名为<a href="https://docs.microsoft.com/en-us/windows/desktop/api/fileapi/nf-fileapi-definedosdevicew" target="_blank" rel="noopener">DefineDosDevice</a>的函数，此API的目的是允许用户定义新的DOS驱动器号。 API需要三个参数，一组标志，要创建的驱动器前缀（例如X :)和映射该驱动器的目标设备。 API的主要用途和CMD的<a href="https://docs.microsoft.com/en-us/windows-server/administration/windows-commands/subst" target="_blank" rel="noopener">SUBST</a>命令相似。</p>
+<p>在现代版本的Windows上，此API在用户自己的DOS设备对象目录中创建一个对象管理器符号链接，该位置可由普通的低权限用户帐户写入。 但是，如果你看一下DefineDosDevice的实现，你会发现它没有在调用者的进程中实现。 相反，该实现在当前会话的CSRSS服务中调用RPC方法，特别是BASESRV.DLL中的BaseSrvDefineDosDevice方法。 调用特权服务的主要原因是它允许用户创建永久符号链接，当符号链接对象的所有句柄都关闭时，该链接不会被删除。 通常，要创建永久命名的内核对象，你需要SeCreatePermanentPrivilege权限，但普通用户没有该权限。 另一方面CSRSS会这样做，通过调用该服务，我们可以创建永久符号链接。</p>
+<p>创建永久符号链接的能力当然很有趣，但如果我们仅限于在用户的DOS设备目录中创建驱动器号，那它也不是特别有用。 我还注意到，实现从未验证lpDeviceName参数是否为驱动器号。 例如，你可以指定名称“GLOBALROOT\RPC Control\ABC”，它实际上会在用户的DosDevices目录之外创建一个符号链接，特别是在这种情况下，路径为“\RPC Control\ABC”。 因为实现将DosDevice的前缀“\??”添加到设备名称并将其传递给NtCreateSymbolicLink。内核将遵循完整路径，找到GLOBALROOT，它是返回根的特殊符号链接，然后按照创建任意对象的路径。 目前还不清楚这是否是固定行为，所以我更深入地研究了CSRSS的实施情况，CSRSS的缩写形式如下所示。<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br></pre></td><td class="code"><pre><span class="line">NTSTATUS BaseSrvDefineDosDevice(DWORD dwFlags,</span><br><span class="line">                               LPCWSTR lpDeviceName,</span><br><span class="line">                               LPCWSTR lpTargetPath) &#123;</span><br><span class="line">   WCHAR device_name[];</span><br><span class="line">   snwprintf_s(device_name, L&quot;\\??\\%s&quot;, lpDeviceName);</span><br><span class="line">   UNICODE_STRING device_name_ustr;</span><br><span class="line">   OBJECT_ATTRIBUTES objattr;</span><br><span class="line">   RtlInitUnicodeString(&amp;device_name_ustr, device_name);</span><br><span class="line">   InitializeObjectAttributes(&amp;objattr, &amp;device_name_ustr,</span><br><span class="line">                              OBJ_CASE_INSENSITIVE);</span><br><span class="line"></span><br><span class="line">   BOOLEAN enable_impersonation = TRUE;</span><br><span class="line">   CsrImpersonateClient();</span><br><span class="line">   HANDLE handle;</span><br><span class="line">   NTSTATUS status = NtOpenSymbolicLinkObject(&amp;handle, DELETE, &amp;objattr);①</span><br><span class="line">   CsrRevertToSelf();</span><br><span class="line"></span><br><span class="line">   if (NT_SUCCESS(status)) &#123;</span><br><span class="line">       BOOLEAN is_global = FALSE;</span><br><span class="line"></span><br><span class="line">       // Check if we opened a global symbolic link.</span><br><span class="line">       IsGlobalSymbolicLink(handle, &amp;is_global); ②</span><br><span class="line">       if (is_global) &#123;</span><br><span class="line">           enable_impersonation = FALSE; ③</span><br><span class="line">           snwprintf_s(device_name, L&quot;\\GLOBAL??\\%s&quot;, lpDeviceName);</span><br><span class="line">           RtlInitUnicodeString(&amp;device_name_ustr, device_name);</span><br><span class="line">       &#125;</span><br><span class="line"></span><br><span class="line">       // Delete the existing symbolic link.</span><br><span class="line">       NtMakeTemporaryObject(handle);</span><br><span class="line">       NtClose(handle);</span><br><span class="line">   &#125;</span><br><span class="line"></span><br><span class="line">   if (enable_impersonation) &#123; ④</span><br><span class="line">       CsrRevertToSelf();</span><br><span class="line">   &#125;</span><br><span class="line"></span><br><span class="line">   // Create the symbolic link.</span><br><span class="line">   UNICODE_STRING target_name_ustr;</span><br><span class="line">   RtlInitUnicodeString(&amp;target_name_ustr, lpTargetPath);</span><br><span class="line"></span><br><span class="line">   status = NtCreateSymbolicLinkObject(&amp;handle, MAXIMUM_ALLOWED,</span><br><span class="line">                               objattr, target_name_ustr); ⑤</span><br><span class="line"></span><br><span class="line">   if (enable_impersonation) &#123; ⑥</span><br><span class="line">       CsrRevertToSelf();</span><br><span class="line">   &#125;</span><br><span class="line">   if (NT_SUCCESS(status)) &#123;</span><br><span class="line">       status = NtMakePermanentObject(handle); ⑦</span><br><span class="line">       NtClose(handle);</span><br><span class="line">   &#125;</span><br><span class="line">   return status;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>我们可以看到代码所做的第一件事就是构建设备名路径，然后尝试打开DELETE访问①的符号链接对象。 这是因为API支持重新定义现有的符号链接，因此必须先尝试删除旧链接。如果我们遵循链接不存在的默认路径，我们将看到代码模拟调用者（在这种情况下为低权限用户）④，然后创建符号链接对象⑤，恢复模拟⑥并在返回操作状态之前使对象永久化⑦。 没有什么太令人惊讶的，至于为什么我们可以创建任意符号链接，是因为所有代码都是在传递的设备名称前加上“\??”。 由于代码在执行任何重要操作时模拟调用者，因此我们只能在用户可以写入的位置创建链接。</p>
+<p>更有趣的是中间条件，其中为DELETE访问打开目标符号链接，这是调用NtMakeTemporaryObject所必需的。 打开的句柄传递给另一个函数②，IsGlobalSymbolicLink，并根据该函数的结果设置禁用模拟的标志，然后使用全局DOS设备位置\GLOBAL再次重新创建设备名称？ 对于前缀③，什么是IsGlobalSymbolicLink呢？ 我们再一次可以重新启动该功能并进行检查。<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">void IsGlobalSymbolicLink(HANDLE handle, BOOLEAN* is_global) &#123;</span><br><span class="line">   BYTE buffer[0x1000];</span><br><span class="line">   NtQueryObject(handle, ObjectNameInformation, buffer, sizeof(buffer));</span><br><span class="line">   UNICODE_STRING prefix;</span><br><span class="line">   RtlInitUnicodeString(&amp;prefix, L&quot;\\GLOBAL??\\&quot;);</span><br><span class="line">   // Check if object name starts with \GLOBAL?? </span><br><span class="line">   *is_global = RtlPrefixUnicodeString(&amp;prefix, (PUNICODE_STRING)buffer);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>此代码会检查打开的对象的名称是否以\GLOBAL ??\开头。如果是，它将is_global标志设置为TRUE。使该标志模拟被清除并设备名称被重写。这意味着如果调用者具有对全局DOS设备目录内的符号链接的DELETE访问权限，则将重新创建符号链接而不进行任何模拟，也就是它会被创建为SYSTEM用户。这并不是很有趣，因为默认情况下只有管理员可以打开DELETE访问的全局符号链接之一。但是，如果我们能在全局DOS设备目录下创建一个可由低权限用户写入的子目录，该怎么办？可以打开该目录中的任何符号链接以进行DELETE访问，因为低权限用户可以指定他们喜欢的任何访问权限，代码会将链接标记为全局，而实际情况并非如此，禁用模拟并将其重新创建为SYSTEM 。猜猜看，我们有一个漏洞可以让我们在全局DOS设备目录下创建一个任意对象目录。</p>
+<p>如果不是为了重写路径，这并不是非常可利用的。 我们可以利用路径“\??\ABC”与“\GLOBAL ??\ABC”不同的特点，以构造在对象管理器命名空间中作为SYSTEM创建任意符号链接的机制。 这对我们有什么帮助？ 如果你编写了一个指向KnownDlls的符号链接，那么在打开DLL加载程序请求的部分时，内核将会跟随它。 因此，即使我们无法在KnownDlls中直接创建新的节对象，我们也可以创建一个符号链接，该链接指向该目录之外的低权限用户可以创建节对象的位置。 我们现在可以利用劫持将任意DLL加载到特权进程内的内存中，并实现提权。</p>
+<p>把这些全总结在一起，我们可以使用下面的步骤来利用漏洞：</p>
+<ol>
+<li>使用此漏洞创建目录“\GLOBAL ??\KnownDlls”</li>
+<li>在新目录中创建一个符号链接，其中包含要劫持的DLL的名称，例如TAPI32.DLL。 此链接的目标无关紧要。</li>
+<li>在用户的DOS设备目录中创建一个名为“GLOBALROOT”的新符号链接，指向“\GLOBAL ??”。 当调用者通过用户的DOS设备目录访问它时，将覆盖真正的GLOBALROOT符号链接对象。</li>
+<li>调用DefineDosDevice，指定设备名称“GLOBALROOT\KnownDlls\TAPI32.DLL”以及用户可以在其中创建节对象的位置的目标路径。 这将导致以下情况：<br> a. CSRSS打开符号链接“\??\GLOBALROOT\KnownDlls\TAPI32.DLL”，然后打开“\GLOBAL ??\KnownDlls\TAPI32.DLL”。 由于这是由用户控制的，所以能成功打开，并且该链接被视为全局，禁用模拟。<br> b. CSRSS将路径重写为“\GLOBAL ??\GLOBALROOT\KnownDlls\TAPI32.DLL”，然后调用NtCreateSymbolicLinkObject而不进行模拟。 这使得之后真正的GLOBALROOT被链接，并创建具有任意目标路径的符号链接“\KnownDlls\TAPI32.DLL”。</li>
+<li>在目标位置为任意DLL创建映像节对象，然后通过获取服务来使用TAPI32.DLL的路径调用LoadLibrary，强制将其加载到特权服务（如诊断中心）中。</li>
+<li>实现提权</li>
+</ol>
+<p>这实际上是第二次使用DefineDosDevice API进行利用，它是Protected Process Light （PPL）旁路管理员。 PPL进程仍然使用KnownDlls，因此如果你能添加新条目，那么也可以将代码注入受保护进程。 为了防止该定向攻击，Windows使用进程信任标签标记KnownDlls目录，该进程信任标签阻止除最高级别PPL进程以外的所有进程写入，如下所示。<br><img src="https://xzfile.aliyuncs.com/media/upload/picture/20180831130827-e517deca-acdb-1.png" alt=""></p>
+<p>那么我们的漏洞利用如何运作？ CSRSS实际上作为最高级别的PPL运行，因此允许写入KnownDlls目录。 一旦模拟被删除，就能使用进程的身份，这样就能获取完全访问权限。</p>
+<p>如果你想测试这个漏洞我已经在<a href="https://bugs.chromium.org/p/project-zero/issues/detail?id=1550#c5" target="_blank" rel="noopener">这里</a>将新的PoC附加到问题tracker。</p>
+<h1 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h1><p>你可能想知道我是否向Node报告了DefineDosDevice的行为？ 我没有，主要是因为它本身并不是一个漏洞。 即使在PPL管理员的情况下，MSRC也不会考虑可用的安全边界（比如这个<a href="https://bugs.chromium.org/p/project-zero/issues/detail?id=1336" target="_blank" rel="noopener">例子</a>）。 当然，Windows开发人员可能会尝试在将来更改此行为，假设它不会导致兼容性的重大回归。 这个功能自Windows早期就已存在，至少从Windows XP开始，因此可能存在依赖它的东西。 通过详细描述这个漏洞，我想给MS提供尽可能多的信息，以便在将来解决这种开发技术。</p>
+<p>我确实向MSRC报告了这个漏洞，并在2018年6月的补丁中得到修复。 Microsoft如何修复此漏洞？ 开发人员添加了一个新的API，CreateAppContainerTokenForUser，它在创建新的AppContainer令牌期间模拟令牌。 通过在令牌创建期间模拟，代码可确保仅使用用户的权限创建所有对象。 由于它是一个新的API，因此必须更改现有代码才能使用它，因此你仍然可以在旧的CreateAppContainerToken的代码中找到可利用的漏洞。</p>
+<p>在利用任何平台上的漏洞时，有时也需要深入了解不同组件的交互方式。 在这种情况下，虽然最初的漏洞显然是一个安全问题，但目前尚不清楚如何进行全面利用。 在逆向工程中遇到的有趣行为的日志总是值得记录下来的，即使某些东西本身不是安全漏洞，但它有可能对利用另一个漏洞有用。</p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">GETAGGT IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/windows/">windows</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/09/08/linux下fuzz初试/" data-tooltip="linux下fuzz初试" aria-label="FRÜHER: linux下fuzz初试">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/09/08/Windows利用技巧：利用任意文件写进行本地提权/" data-tooltip="Windows利用技巧：利用任意文件写进行本地提权" aria-label="NÄCHSTER: Windows利用技巧：利用任意文件写进行本地提权">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/09/08/Windows利用技巧：利用任意对象目录创建进行本地提权/" title="Teilen auf Facebook">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/09/08/Windows利用技巧：利用任意对象目录创建进行本地提权/" title="Teilen auf Twitter">
+                    <i class="fa fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/09/08/Windows利用技巧：利用任意对象目录创建进行本地提权/" title="Teilen auf Google Plus">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2018 Edvison. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="5">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/09/08/linux下fuzz初试/" data-tooltip="linux下fuzz初试" aria-label="FRÜHER: linux下fuzz初试">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">FRÜHER</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2018/09/08/Windows利用技巧：利用任意文件写进行本地提权/" data-tooltip="Windows利用技巧：利用任意文件写进行本地提权" aria-label="NÄCHSTER: Windows利用技巧：利用任意文件写进行本地提权">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NÄCHSTER</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Diesen Beitrag teilen">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/09/08/Windows利用技巧：利用任意对象目录创建进行本地提权/" title="Teilen auf Facebook">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/09/08/Windows利用技巧：利用任意对象目录创建进行本地提权/" title="Teilen auf Twitter">
+                    <i class="fa fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/09/08/Windows利用技巧：利用任意对象目录创建进行本地提权/" title="Teilen auf Google Plus">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Inhaltsverzeichnis">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                <div id="share-options-bar" class="share-options-bar" data-behavior="5">
+    <i id="btn-close-shareoptions" class="fa fa-close"></i>
+    <ul class="share-options">
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://edvison.cn/2018/09/08/Windows利用技巧：利用任意对象目录创建进行本地提权/">
+                    <i class="fa fa-facebook-official" aria-hidden="true"></i><span>Teilen auf Facebook</span>
+                </a>
+            </li>
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://edvison.cn/2018/09/08/Windows利用技巧：利用任意对象目录创建进行本地提权/">
+                    <i class="fa fa-twitter" aria-hidden="true"></i><span>Teilen auf Twitter</span>
+                </a>
+            </li>
+        
+            
+            
+            <li class="share-option">
+                <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://edvison.cn/2018/09/08/Windows利用技巧：利用任意对象目录创建进行本地提权/">
+                    <i class="fa fa-google-plus" aria-hidden="true"></i><span>Teilen auf Google Plus</span>
+                </a>
+            </li>
+        
+    </ul>
+</div>
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-remove"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/1.png" alt="Bild des Autors"/>
+        
+            <h4 id="about-card-name">Edvison</h4>
+        
+            <div id="about-card-bio"><p>Just the way you are</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>二进制、逆向</p>
+
+            </div>
+        
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover-v1.2.0.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/jquery.js"></script>
+<script src="/assets/js/jquery.fancybox.js"></script>
+<script src="/assets/js/thumbs.js"></script>
+<script src="/assets/js/tranquilpeak.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script src="/live2dw/lib/L2Dwidget.min.js?0c58a1486de42ac6cc1c59c7d98ae887"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","model":{"jsonPath":"/live2dw/assets/wanko.model.json"},"display":{"position":"right","width":100,"height":200},"mobile":{"show":true}});</script></body>
+</html>
